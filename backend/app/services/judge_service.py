@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 from typing import Any, Dict, List
 
@@ -21,13 +21,38 @@ PROCESS_DOC_KEYWORDS = ["审批", "同意", "签字", "表决", "业主大会", 
 def _request_text(req: AuditRequest) -> str:
     parts = [
         req.application_text,
+        req.raw_text,
         req.project_name or "",
         req.applicant or "",
         req.use_case or "",
+        req.data_source or "",
+        req.knowledge_base_name or "",
         " ".join(req.docs),
+        " ".join(req.publicity_locations),
     ]
+
     if req.amount is not None:
         parts.append(f"申请金额 {req.amount}")
+    if req.voting_start_date:
+        parts.append(f"表决开始 {req.voting_start_date}")
+    if req.voting_end_date:
+        parts.append(f"表决结束 {req.voting_end_date}")
+    if req.publicity_start_date:
+        parts.append(f"公示开始 {req.publicity_start_date}")
+    if req.publicity_end_date:
+        parts.append(f"公示结束 {req.publicity_end_date}")
+    if req.total_households is not None:
+        parts.append(f"总业主户数 {req.total_households}")
+    if req.participating_households is not None:
+        parts.append(f"参与表决户数 {req.participating_households}")
+    if req.agreed_households is not None:
+        parts.append(f"同意户数 {req.agreed_households}")
+    if req.agree_ratio is not None:
+        parts.append(f"同意比例 {req.agree_ratio}%")
+
+    for key, value in (req.extracted_fields or {}).items():
+        parts.append(f"{key}: {value}")
+
     return " ".join(part for part in parts if part)
 
 
@@ -56,6 +81,29 @@ def _extract_basis(results: List[RetrievalResult]) -> List[str]:
     return basis[:5]
 
 
+def _judge_voting_and_publicity(req: AuditRequest) -> List[str]:
+    reasons: List[str] = []
+
+    if req.agree_ratio is not None and req.agree_ratio < 66.67:
+        reasons.append(f"同意比例不足，当前为 {req.agree_ratio}%")
+
+    if req.total_households and req.agreed_households is not None:
+        ratio = (req.agreed_households / req.total_households) * 100
+        if ratio < 66.67:
+            reasons.append(f"同意户数占总户数比例不足，当前为 {ratio:.2f}%")
+
+    if req.voting_end_date and req.publicity_start_date and req.publicity_start_date < req.voting_end_date:
+        reasons.append("公示开始时间早于表决结束时间，流程时序异常")
+
+    if req.publicity_start_date and req.publicity_end_date and req.publicity_end_date < req.publicity_start_date:
+        reasons.append("公示结束时间早于公示开始时间")
+
+    if req.voting_start_date and req.voting_end_date and req.voting_end_date < req.voting_start_date:
+        reasons.append("表决结束时间早于表决开始时间")
+
+    return reasons
+
+
 def _heuristic_judge(req: AuditRequest, results: List[RetrievalResult]) -> JudgeResult:
     request_text = _request_text(req)
     reasons: List[str] = []
@@ -75,6 +123,12 @@ def _heuristic_judge(req: AuditRequest, results: List[RetrievalResult]) -> Judge
         if needs_approval and not any(token in doc_text or token in request_text for token in PROCESS_DOC_KEYWORDS):
             missing_process_docs.append("审批/同意类材料未体现")
 
+    missing_required_docs = []
+    for item in results:
+        for doc in item.rule.logic_rules.required_docs:
+            if doc and doc not in doc_text and doc not in missing_required_docs:
+                missing_required_docs.append(doc)
+
     high_risk_rules = []
     for item in results:
         forbidden = item.rule.logic_rules.forbidden
@@ -82,10 +136,14 @@ def _heuristic_judge(req: AuditRequest, results: List[RetrievalResult]) -> Judge
             high_risk_rules.append(item)
             negative_reasons.append(f"{item.rule.clause_label} 命中禁止事项: {', '.join(forbidden[:3])}")
 
+    reasons.extend(_judge_voting_and_publicity(req))
+
     if negative_reasons:
         reasons.extend(negative_reasons)
     if missing_process_docs:
         reasons.extend(missing_process_docs)
+    if missing_required_docs:
+        reasons.append(f"缺少关键材料: {', '.join(missing_required_docs[:5])}")
 
     compliant = not reasons
     if compliant and results:
@@ -105,7 +163,9 @@ def _heuristic_judge(req: AuditRequest, results: List[RetrievalResult]) -> Judge
             "docs": req.docs,
             "matched_rule_count": len(results),
             "negative_hits": negative_reasons,
-            "missing_docs": missing_process_docs,
+            "missing_docs": missing_process_docs + missing_required_docs,
+            "agree_ratio": req.agree_ratio,
+            "publicity_locations": req.publicity_locations,
         },
     )
 
