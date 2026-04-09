@@ -1,3 +1,5 @@
+from fastapi.encoders import jsonable_encoder
+
 from app.core.dbhelper import MenuDao, RoleDao, RoleMenuDao, has_permissions
 from app.core.service import Service
 from app.core.utils import list_to_tree
@@ -6,6 +8,44 @@ from app.core.utils import list_to_tree
 class RoleService(Service):
     def __init__(self):
         super(RoleService, self).__init__(RoleDao)
+
+    @staticmethod
+    async def _load_role_users(role_id: int) -> list[str]:
+        sql = """
+            select u.username
+            from sys_user u
+            join sys_user_role ur on u.id = ur.uid
+            where ur.rid = $1 and u.status != 9 and ur.status != 9
+            order by u.id asc
+        """
+        rows = await RoleDao.raw_sql(sql, [role_id])
+        return [row["username"] for row in rows]
+
+    async def _serialize_roles(self, items) -> list[dict]:
+        rows = []
+        for item in items:
+            role = jsonable_encoder(item)
+            users = await self._load_role_users(role["id"])
+            role["user_count"] = len(users)
+            role["users"] = users
+            rows.append(role)
+        return rows
+
+    async def get_items(self, offset, limit):
+        skip = (offset - 1) * limit
+        payload = await self.dao.selects(skip, limit, Service.filter_del)
+        payload["items"] = await self._serialize_roles(payload["items"])
+        return dict(data=payload)
+
+    async def query_items(self, query):
+        size = query.limit
+        skip = (query.offset - 1) * size
+        del query.offset, query.limit
+        filters = {f"{k}__contains": v for k, v in query.dict().items()}
+        filters.update(Service.filter_del)
+        payload = await self.dao.selects(skip, size, filters)
+        payload["items"] = await self._serialize_roles(payload["items"])
+        return dict(data=payload)
 
     async def create_item(self, role):
         """

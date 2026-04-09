@@ -10,7 +10,7 @@ T = TypeVar("T")
 
 class Response(GenericModel, Generic[T]):
     code: int = 200
-    data: Optional[T]
+    data: Optional[T] = None
     msg: str = "请求成功"
 
 

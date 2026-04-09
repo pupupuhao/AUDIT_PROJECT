@@ -15,6 +15,16 @@ export const columns = [
     key: 'remark'
   },
   {
+    title: '用户数',
+    dataIndex: 'user_count',
+    key: 'user_count'
+  },
+  {
+    title: '已分配用户',
+    dataIndex: 'users',
+    key: 'users'
+  },
+  {
     title: '状态',
     dataIndex: 'status',
     key: 'status'
@@ -38,11 +48,11 @@ export const columns = [
 export const rules = {
   name: [
     { required: true, message: '请输入名称', trigger: 'blur' },
-    { min: 3, max: 12, message: '3-12', trigger: 'blur' }
+    { min: 2, max: 20, message: '2~20', trigger: 'blur' }
   ],
   remark: [
     { required: true, message: '请输入描述', trigger: 'blur' },
-    { min: 1, max: 20, message: '1~20', trigger: 'blur' }
+    { min: 1, max: 50, message: '1~50', trigger: 'blur' }
   ],
   menus: [{ required: true, message: '请选择菜单', trigger: 'blur' }]
 }

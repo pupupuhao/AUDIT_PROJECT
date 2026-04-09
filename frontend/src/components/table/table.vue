@@ -77,6 +77,9 @@ const expand = tableTree()
           <template v-if="column.key === 'icon'">
             <component :is="$loadIconCpn(record.icon)"></component>
           </template>
+          <template v-else-if="column.key === 'users'">
+            {{ Array.isArray(record.users) && record.users.length ? record.users.join(', ') : '-' }}
+          </template>
           <template v-if="column.key === 'type'">
             {{ menuType[record.type] }}
           </template>

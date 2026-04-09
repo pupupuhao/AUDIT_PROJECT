@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
 from typing import List
+
+from pydantic import BaseModel, Field
 
 from modules.system.schemas.common import QueryData, ReadBase
 
@@ -25,7 +26,8 @@ class RoleIn(RoleBasic):
 
 
 class RoleRead(RoleBasic, ReadBase):
-    pass
+    user_count: int = Field(default=0, description="已分配用户数")
+    users: List[str] = Field(default_factory=list, description="已分配用户名列表")
 
 
 class RoleInfo(RoleRead):

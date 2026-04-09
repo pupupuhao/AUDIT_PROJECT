@@ -86,7 +86,16 @@ async def check_permissions(request: Request, user=Depends(check_token)):
     # 缓存到fastapi 应用实例中
     if not hasattr(request.app.state, cache_key):
         setattr(request.app.state, cache_key, await has_permissions(active_rid))
-    if {"api": api, "method": request.method} not in getattr(
-        request.app.state, cache_key
-    ):
+
+    current_permissions = getattr(request.app.state, cache_key)
+
+    # 角色编辑弹窗会读取任意角色的菜单树，这里应复用角色管理权限，而不是只允许当前激活角色自身。
+    if api == "/api/system/role/{rid}/menu" and request.method == "GET":
+        if {"api": "/api/system/role", "method": "GET"} in current_permissions or {
+            "api": "/api/system/role/{pk}",
+            "method": "PUT",
+        } in current_permissions:
+            return user
+
+    if {"api": api, "method": request.method} not in current_permissions:
         raise PermissionsError(403, detail="无权访问")
