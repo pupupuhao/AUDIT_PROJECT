@@ -173,8 +173,8 @@ uvicorn app.main:app --reload
 默认访问：
 
 ```text
-http://127.0.0.1:8000
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8001
+http://127.0.0.1:8001/docs
 ```
 
 ### 启动前端
