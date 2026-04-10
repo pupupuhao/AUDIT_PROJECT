@@ -47,11 +47,22 @@ const changeSiderFold = (subValue) => {
   left: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .ant-layout {
   width: 100%;
   height: 100%;
+}
+
+:deep(.ant-layout-sider-children) {
+  overflow-y: auto;
+}
+
+.content {
+  height: calc(100vh - 64px - 48px);
+  overflow: auto;
+  min-width: 0;
 }
 
 #components-layout-demo-custom-trigger .trigger {

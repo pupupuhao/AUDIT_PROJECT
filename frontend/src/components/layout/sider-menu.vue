@@ -13,7 +13,9 @@ const menuClick = (menu) => {
 
 <template>
   <div class="sider-menu">
-    <div class="logo"></div>
+    <div class="brand">
+      <div class="brand-title">审计规则管理系统</div>
+    </div>
     <a-menu theme="dark" mode="inline" v-model:selectedKeys="store.selectKey">
       <template v-for="menu in store.userMenus" :key="menu.id">
         <!-- 0 目录 顶层菜单 -->
@@ -25,7 +27,7 @@ const menuClick = (menu) => {
             <template #title>{{ menu.name }}</template>
             <!-- 1 组件 子菜单项 -->
             <template v-for="sub in menu.children" :key="sub.id">
-              <a-menu-item @click="menuClick(sub)">
+              <a-menu-item v-if="!sub.hidden" @click="menuClick(sub)">
                 <template #icon>
                   <component :is="$loadIconCpn(sub.icon)"></component>
                 </template>
@@ -40,11 +42,79 @@ const menuClick = (menu) => {
 </template>
 
 <style scoped>
-.logo {
-  display: flex;
-  height: 32px;
-  background: rgba(255, 255, 255, 0.3) url('@/assets/img/fastapi.svg');
-  margin: 16px;
-  background-size: 100% 100%;
+.sider-menu {
+  height: 100%;
+  padding: 14px 10px 16px;
+  background: linear-gradient(180deg, #071a2d 0%, #0a2238 100%);
+}
+
+.brand {
+  margin: 6px 8px 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brand-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.96);
+  line-height: 1.4;
+}
+
+.brand-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
+  letter-spacing: 0.04em;
+}
+
+:deep(.ant-menu) {
+  border-inline-end: none !important;
+  background: transparent !important;
+}
+
+:deep(.ant-menu-item),
+:deep(.ant-menu-submenu-title) {
+  outline: none !important;
+  height: 42px !important;
+  line-height: 42px !important;
+  margin: 6px 0 !important;
+  border-radius: 10px !important;
+  width: 100% !important;
+  background: transparent !important;
+}
+
+:deep(.ant-menu-item:focus-visible),
+:deep(.ant-menu-submenu-title:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+:deep(.ant-menu-dark .ant-menu-item),
+:deep(.ant-menu-dark .ant-menu-submenu-title) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-menu-dark .ant-menu-item:hover),
+:deep(.ant-menu-dark .ant-menu-submenu-title:hover) {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+:deep(.ant-menu-item-selected) {
+  box-shadow: none !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+:deep(.ant-menu-dark .ant-menu-item-selected::after) {
+  display: none !important;
+}
+
+:deep(.ant-menu-sub.ant-menu-inline) {
+  background: transparent !important;
+}
+
+:deep(.ant-menu-submenu-arrow) {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 </style>

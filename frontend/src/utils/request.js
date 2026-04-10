@@ -17,7 +17,7 @@ export default (config) => {
   instance.interceptors.response.use(
     (res) => {
       userStore().isLoading = !userStore().isLoading
-      if (res.data.code !== 200) {
+      if (typeof res.data.code !== 'undefined' && res.data.code !== 200) {
         message.error(res.data.msg)
       }
       console.log(res.data)

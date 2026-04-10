@@ -4,6 +4,7 @@ import { message } from 'ant-design-vue'
 
 import router from '@/router'
 import { loadRouter, getPermissions } from '@/utils/loadCpn'
+import { normalizeBusinessMenus } from '@/utils/business-menu'
 import { getMenus, getUserInfo, login, selectRole } from '@/service/user'
 
 export const userStore = defineStore(
@@ -43,13 +44,13 @@ export const userStore = defineStore(
 
       // 3. 获取权限信息
       const menus = await getMenus(info.data.roles[0].id)
-      userMenus.value = menus.data
+      userMenus.value = normalizeBusinessMenus(menus.data)
 
       // 3.1 加载路由权限
-      loadRouter(menus.data)
+      loadRouter(userMenus.value)
 
       // 3.2 加载按钮权限
-      const [btnPermissions, firstMenu] = getPermissions(menus.data)
+      const [btnPermissions, firstMenu] = getPermissions(userMenus.value)
       permissions.value = btnPermissions
 
       // 3.2 默认打开菜单

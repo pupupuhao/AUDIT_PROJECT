@@ -7,6 +7,7 @@ from app.core.exceptions import exception_handlers
 from app.core.middleware import middlewares
 
 from modules.audit.api.judge_api import router as judge_router
+from modules.audit.api.law_api import router as law_router
 from modules.audit.api.rule_api import router as rule_router
 from modules.audit.api.search_api import router as search_router
 from modules.system.api.auth_api import router as auth_router
@@ -39,6 +40,7 @@ app.include_router(user_router, prefix="/api/system")
 app.include_router(role_router, prefix="/api/system")
 app.include_router(menu_router, prefix="/api/system")
 
+app.include_router(law_router, prefix="/api/audit")
 app.include_router(rule_router, prefix="/api/audit")
 app.include_router(search_router, prefix="/api/audit")
 app.include_router(judge_router, prefix="/api/audit")
@@ -54,6 +56,7 @@ def healthcheck():
             "/api/system/user",
             "/api/system/role",
             "/api/system/menu",
+            "/api/audit/laws",
             "/api/audit/rules",
             "/api/audit/search",
             "/api/audit/judge",

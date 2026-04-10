@@ -38,6 +38,7 @@ function resolveComponent(menu) {
     if (
       !component.startsWith('/system/') &&
       !component.startsWith('/audit/') &&
+      !component.startsWith('/business/') &&
       !component.startsWith('/dashboard/') &&
       !component.startsWith('/test/')
     ) {
