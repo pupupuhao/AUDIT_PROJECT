@@ -146,6 +146,124 @@ class PgVectorStore:
             )
         return results
 
+    def list_rules(
+        self,
+        offset: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+        category: str = "",
+    ) -> Dict[str, Any]:
+        filters = []
+        payload: Dict[str, Any] = {
+            "offset": max(offset - 1, 0) * limit,
+            "limit": limit,
+        }
+
+        if keyword:
+            filters.append(
+                """
+                (
+                    rule_id ILIKE %(keyword)s
+                    OR law_name ILIKE %(keyword)s
+                    OR clause_label ILIKE %(keyword)s
+                    OR full_title ILIKE %(keyword)s
+                    OR content ILIKE %(keyword)s
+                )
+                """
+            )
+            payload["keyword"] = f"%{keyword}%"
+
+        if category:
+            filters.append("category = %(category)s")
+            payload["category"] = category
+
+        where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+        count_sql = f"""
+        SELECT COUNT(*)
+        FROM knowledge_base
+        {where_sql}
+        """
+        list_sql = f"""
+        SELECT
+            rule_id, law_name, clause_label, full_title, content,
+            category, keywords, logic_rules, required_fields
+        FROM knowledge_base
+        {where_sql}
+        ORDER BY rule_id ASC
+        OFFSET %(offset)s
+        LIMIT %(limit)s
+        """
+        categories_sql = """
+        SELECT DISTINCT category
+        FROM knowledge_base
+        WHERE category IS NOT NULL AND category != ''
+        ORDER BY category ASC
+        """
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(count_sql, payload)
+                total = cur.fetchone()[0]
+
+                cur.execute(list_sql, payload)
+                rows = cur.fetchall()
+
+                cur.execute(categories_sql)
+                category_rows = cur.fetchall()
+
+        items = []
+        for row in rows:
+            items.append(
+                {
+                    "id": row[0],
+                    "law_name": row[1],
+                    "clause_label": row[2],
+                    "full_title": row[3],
+                    "content": row[4],
+                    "category": row[5],
+                    "keywords": row[6] or [],
+                    "logic_rules": row[7] or {},
+                    "required_docs": row[8] or [],
+                }
+            )
+
+        return {
+            "total": total,
+            "items": items,
+            "categories": [row[0] for row in category_rows],
+        }
+
+    def get_rule(self, rule_id: str) -> Optional[Dict[str, Any]]:
+        sql = """
+        SELECT
+            rule_id, law_name, clause_label, full_title, content,
+            category, keywords, logic_rules, required_fields
+        FROM knowledge_base
+        WHERE rule_id = %(rule_id)s
+        LIMIT 1
+        """
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"rule_id": rule_id})
+                row = cur.fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "id": row[0],
+            "law_name": row[1],
+            "clause_label": row[2],
+            "full_title": row[3],
+            "content": row[4],
+            "category": row[5],
+            "keywords": row[6] or [],
+            "logic_rules": row[7] or {},
+            "required_docs": row[8] or [],
+        }
+
     def insert_project(self, project_name: str, raw_data: Dict[str, Any]) -> int:
         sql = """
         INSERT INTO project_data (project_name, raw_data)

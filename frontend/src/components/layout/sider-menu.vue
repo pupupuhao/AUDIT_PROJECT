@@ -44,7 +44,7 @@ const menuClick = (menu) => {
 <style scoped>
 .sider-menu {
   height: 100%;
-  padding: 14px 10px 16px;
+  padding: 14px 12px 16px;
   background: linear-gradient(180deg, #071a2d 0%, #0a2238 100%);
 }
 
@@ -83,6 +83,7 @@ const menuClick = (menu) => {
   border-radius: 10px !important;
   width: 100% !important;
   background: transparent !important;
+  padding-inline: 16px !important;
 }
 
 :deep(.ant-menu-item:focus-visible),
@@ -116,5 +117,9 @@ const menuClick = (menu) => {
 
 :deep(.ant-menu-submenu-arrow) {
   color: rgba(255, 255, 255, 0.7) !important;
+}
+
+:deep(.ant-menu-title-content) {
+  min-width: 0;
 }
 </style>

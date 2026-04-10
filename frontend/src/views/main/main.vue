@@ -16,7 +16,13 @@ const changeSiderFold = (subValue) => {
 <template>
   <div class="main">
     <a-layout>
-      <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible>
+      <a-layout-sider
+        v-model:collapsed="collapsed"
+        :trigger="null"
+        :width="236"
+        :collapsed-width="78"
+        collapsible
+      >
         <!-- 动态菜单 -->
         <SiderMenu />
       </a-layout-sider>

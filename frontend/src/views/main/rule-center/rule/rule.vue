@@ -152,7 +152,7 @@ onMounted(fetchData)
               <h3>{{ selectedRule.id }}</h3>
               <div class="detail-title">{{ selectedRule.full_title || selectedRule.clause_label }}</div>
             </div>
-            <a-tag color="blue">{{ selectedRule.category }}</a-tag>
+            <div class="category-badge">{{ selectedRule.category }}</div>
           </div>
           <div class="detail-meta">
             <div><strong>所属法规：</strong>{{ selectedRule.law_name }}</div>
@@ -265,11 +265,26 @@ onMounted(fetchData)
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: flex-start;
 }
 
 .detail-title {
   margin-top: 6px;
   color: #6a7282;
+}
+
+.category-badge {
+  flex: 0 0 auto;
+  max-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid #8fc6ff;
+  border-radius: 8px;
+  background: #eef7ff;
+  color: #1677ff;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .detail-meta {
@@ -308,6 +323,10 @@ onMounted(fetchData)
   .filters :deep(.ant-select),
   .filters :deep(.ant-input-search) {
     width: 100% !important;
+  }
+
+  .detail-header {
+    flex-direction: column;
   }
 }
 </style>

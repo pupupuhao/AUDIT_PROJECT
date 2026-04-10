@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
+from app.db.pgvector import get_pgvector_store
 from modules.audit.schemas.rule_model import RuleModel
 
 
@@ -70,6 +71,51 @@ def get_rule_by_id(rule_id: str) -> RuleModel | None:
         if rule.id == rule_id:
             return rule
     return None
+
+
+def list_rules_from_store(offset: int = 1, limit: int = 20, keyword: str = "", category: str = "") -> dict:
+    store = get_pgvector_store()
+    if store:
+        try:
+            return store.list_rules(offset=offset, limit=limit, keyword=keyword, category=category)
+        except Exception:
+            pass
+
+    rules = load_rules()
+    if keyword:
+        needle = keyword.lower()
+        rules = [
+            rule
+            for rule in rules
+            if needle in rule.law_name.lower()
+            or needle in rule.content.lower()
+            or needle in rule.full_title.lower()
+            or needle in rule.id.lower()
+        ]
+    if category:
+        rules = [rule for rule in rules if rule.category == category]
+
+    start = max(offset - 1, 0) * limit
+    end = start + limit
+    return {
+        "total": len(rules),
+        "items": [rule.model_dump() for rule in rules[start:end]],
+        "categories": sorted({rule.category for rule in load_rules()}),
+    }
+
+
+def get_rule_by_id_from_store(rule_id: str) -> dict | None:
+    store = get_pgvector_store()
+    if store:
+        try:
+            rule = store.get_rule(rule_id)
+            if rule:
+                return rule
+        except Exception:
+            pass
+
+    rule = get_rule_by_id(rule_id)
+    return rule.model_dump() if rule else None
 
 
 def _parse_law_documents(markdown: str) -> list[dict]:
