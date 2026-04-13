@@ -1,4 +1,6 @@
 """数据库通用查询方法"""
+from datetime import datetime, timezone
+
 from tortoise import connections
 
 from modules.system.models import (
@@ -8,6 +10,7 @@ from modules.system.models import (
     UserModel,
     UserRoleModel,
 )
+from modules.audit.models import LawClauseModel
 
 
 class DbHelper:
@@ -43,6 +46,15 @@ class DbHelper:
         :param updates: 待更新数据 {"status": 5}
         :return: 0 失败， 1 成功
         """
+        if updates is None:
+            updates = {}
+        else:
+            updates = dict(updates)
+
+        # QuerySet.update(...) 不会触发 auto_now，这里统一补齐更新时间
+        if "modified" not in updates and "modified" in self.model._meta.fields_map:
+            updates["modified"] = datetime.now(timezone.utc)
+
         return await self.__filter(filters).update(**updates)
 
     async def delete(self, pk: int) -> int:
@@ -114,6 +126,7 @@ RoleDao = DbHelper(RoleModel)
 UserRoleDao = DbHelper(UserRoleModel)
 MenuDao = DbHelper(MenuModel)
 RoleMenuDao = DbHelper(RoleMenuModel)
+LawClauseDao = DbHelper(LawClauseModel)
 
 
 async def has_roles(uid):

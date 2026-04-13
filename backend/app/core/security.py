@@ -67,6 +67,10 @@ async def check_permissions(request: Request, user=Depends(check_token)):
     # 查询当前激活角色
     roles = await has_roles(user.id)
     active_rid = roles[0]["id"]
+    active_role_name = roles[0]["name"]
+
+    if active_role_name == "super_admin":
+        return user
 
     # 白名单 登录用户信息， 登录用户菜单信息
     whitelist = [

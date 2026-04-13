@@ -4,10 +4,24 @@ import { userStore } from '@/stores/user'
 
 const store = userStore()
 const router = useRouter()
+const externalAppUrl = (import.meta.env.VITE_AUDIT_JUDGE_URL || 'http://localhost:3000').trim()
 
 // 菜单点击事件
 const menuClick = (menu) => {
+  if (menu.external && menu.path) {
+    window.open(menu.path, '_blank', 'noopener,noreferrer')
+    return
+  }
+
   router.push(menu.path)
+}
+
+const externalMenu = {
+  id: 'external-local-app',
+  name: '前往审核',
+  icon: 'LinkOutlined',
+  path: externalAppUrl,
+  external: true
 }
 </script>
 
@@ -27,7 +41,7 @@ const menuClick = (menu) => {
             <template #title>{{ menu.name }}</template>
             <!-- 1 组件 子菜单项 -->
             <template v-for="sub in menu.children" :key="sub.id">
-              <a-menu-item v-if="!sub.hidden" @click="menuClick(sub)">
+              <a-menu-item v-if="!sub.hidden" :key="sub.id" @click="menuClick(sub)">
                 <template #icon>
                   <component :is="$loadIconCpn(sub.icon)"></component>
                 </template>
@@ -37,6 +51,12 @@ const menuClick = (menu) => {
           </a-sub-menu>
         </template>
       </template>
+      <a-menu-item :key="externalMenu.id" @click="menuClick(externalMenu)">
+        <template #icon>
+          <component :is="$loadIconCpn(externalMenu.icon)"></component>
+        </template>
+        <span>{{ externalMenu.name }}</span>
+      </a-menu-item>
     </a-menu>
   </div>
 </template>
