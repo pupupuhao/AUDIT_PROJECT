@@ -4,15 +4,9 @@ import { userStore } from '@/stores/user'
 
 const store = userStore()
 const router = useRouter()
-const externalAppUrl = (import.meta.env.VITE_AUDIT_JUDGE_URL || 'http://localhost:3000').trim()
 
 // 菜单点击事件
 const menuClick = (menu) => {
-  if (menu.external && menu.path) {
-    window.open(menu.path, '_blank', 'noopener,noreferrer')
-    return
-  }
-
   router.push(menu.path)
 }
 
@@ -20,8 +14,7 @@ const externalMenu = {
   id: 'external-local-app',
   name: '前往审核',
   icon: 'LinkOutlined',
-  path: externalAppUrl,
-  external: true
+  path: '/main/audit-engine/judge'
 }
 </script>
 

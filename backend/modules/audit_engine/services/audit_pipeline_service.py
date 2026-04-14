@@ -1,0 +1,43 @@
+from typing import Any, Dict
+
+from modules.audit_engine.services.audit_service import audit_project
+from modules.audit_engine.services.high_freq_mapping_service import match_high_freq_category
+from modules.audit_engine.services.mapping_service import map_project_name
+from modules.audit_engine.services.result_builder import build_high_freq_result
+
+
+def _prepend_unique_reason(reasons: list[str], statement: str) -> list[str]:
+    if not statement:
+        return reasons
+    normalized = statement.strip()
+    if not normalized:
+        return reasons
+    if any(item.strip() == normalized for item in reasons):
+        return reasons
+    return [normalized, *reasons]
+
+
+def run_audit_pipeline(payload: Dict[str, Any]) -> Dict[str, Any]:
+    project_name = payload.get("project_name", "")
+    high_freq = match_high_freq_category(project_name)
+    action = high_freq.get("action", "no_match")
+
+    if high_freq.get("matched") and action in {
+        "direct_reject",
+        "route_to_manual_review",
+        "route_to_need_supplement",
+    }:
+        return build_high_freq_result(project_name=project_name, high_freq_result=high_freq, action=action)
+
+    mapping_result = map_project_name(project_name)
+    result = audit_project(payload, mapping_result)
+    base_path = ["input_normalization", "high_freq_mapping"]
+    if high_freq.get("matched"):
+        result["audit_path"] = [*base_path, "high_freq_matched", action, *result.get("audit_path", [])]
+        result["reasons"] = _prepend_unique_reason(
+            list(result.get("reasons", [])),
+            high_freq.get("business_statement", ""),
+        )
+    else:
+        result["audit_path"] = [*base_path, "high_freq_no_match", *result.get("audit_path", [])]
+    return result

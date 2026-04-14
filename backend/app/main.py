@@ -11,6 +11,7 @@ from modules.audit.api.law_document_api import router as law_document_router
 from modules.audit.api.law_clause_api import router as law_clause_router
 from modules.audit.api.rule_api import router as rule_router
 from modules.audit.api.search_api import router as search_router
+from modules.audit_engine.api.audit_engine_api import router as audit_engine_router
 from modules.system.api.auth_api import router as auth_router
 from modules.system.api.menu_api import router as menu_router
 from modules.system.api.role_api import router as role_router
@@ -46,6 +47,7 @@ app.include_router(law_clause_router, prefix="/api/audit")
 app.include_router(rule_router, prefix="/api/audit")
 app.include_router(search_router, prefix="/api/audit")
 app.include_router(judge_router, prefix="/api/audit")
+app.include_router(audit_engine_router, prefix="/api/audit")
 
 
 @app.get("/")
@@ -63,5 +65,6 @@ def healthcheck():
             "/api/audit/rules",
             "/api/audit/search",
             "/api/audit/judge",
+            "/api/audit/engine/judge",
         ],
     }
