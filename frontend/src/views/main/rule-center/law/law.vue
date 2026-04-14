@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import { createVNode } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 
 import {
   addLawClause,
@@ -19,6 +21,7 @@ const clauses = ref([])
 
 const modalVisible = ref(false)
 const modalMode = ref('create')
+const createScope = ref('document')
 const saving = ref(false)
 const editingClauseId = ref(null)
 
@@ -76,7 +79,10 @@ const columns = [
   }
 ]
 
-const modalTitle = computed(() => (modalMode.value === 'create' ? '新增法律条款' : '编辑法律条款'))
+const modalTitle = computed(() => {
+  if (modalMode.value === 'update') return '编辑法律条款'
+  return createScope.value === 'document' ? '新增法律文件' : '新增法律条款'
+})
 
 const lawStats = computed(() => {
   const totalDocs = pagination.total
@@ -170,15 +176,29 @@ const searchLaw = () => {
   fetchData()
 }
 
-const openCreateModal = () => {
+const openCreateDocumentModal = () => {
   modalMode.value = 'create'
+  createScope.value = 'document'
   resetClauseForm()
-  clauseForm.law_name = selectedLaw.value?.title || ''
+  modalVisible.value = true
+}
+
+const openCreateClauseModal = () => {
+  if (!selectedLaw.value?.title) {
+    message.warning('请先选择一部法规，再新增条款')
+    return
+  }
+
+  modalMode.value = 'create'
+  createScope.value = 'clause'
+  resetClauseForm()
+  clauseForm.law_name = selectedLaw.value.title
   modalVisible.value = true
 }
 
 const openEditModal = (record) => {
   modalMode.value = 'update'
+  createScope.value = 'clause'
   editingClauseId.value = record.id
   fillClauseForm(record)
   modalVisible.value = true
@@ -243,6 +263,30 @@ const deleteLawDocument = async (record) => {
   await fetchData()
 }
 
+const confirmDeleteClause = (record) => {
+  Modal.confirm({
+    title: '确认删除吗？',
+    icon: createVNode(ExclamationCircleOutlined),
+    content: `删除后将无法恢复：${record.clause_label || record.full_title}`,
+    okText: '删除',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    onOk: () => deleteClause(record)
+  })
+}
+
+const confirmDeleteLawDocument = (record) => {
+  Modal.confirm({
+    title: '确认删除吗？',
+    icon: createVNode(ExclamationCircleOutlined),
+    content: `删除后将移除《${record.title}》下的全部条款。`,
+    okText: '删除',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    onOk: () => deleteLawDocument(record)
+  })
+}
+
 onMounted(fetchData)
 </script>
 
@@ -261,7 +305,7 @@ onMounted(fetchData)
           allow-clear
           @search="searchLaw"
         />
-        <a-button type="primary" @click="openCreateModal">新增条款</a-button>
+        <a-button type="primary" @click="openCreateDocumentModal">新增法律文件</a-button>
       </div>
     </div>
 
@@ -285,14 +329,7 @@ onMounted(fetchData)
             <template v-if="column.key === 'action'">
               <a-space>
                 <a @click="selectLaw(record)">查看详情</a>
-                <a-popconfirm
-                  title="确认删除这部法规及全部条款吗？"
-                  ok-text="删除"
-                  cancel-text="取消"
-                  @confirm="deleteLawDocument(record)"
-                >
-                  <a class="danger-link">删除法规</a>
-                </a-popconfirm>
+                <a class="danger-link" @click="confirmDeleteLawDocument(record)">删除法规</a>
               </a-space>
             </template>
           </template>
@@ -310,7 +347,9 @@ onMounted(fetchData)
             </div>
             <a-space>
               <a-tag color="blue">法规文件</a-tag>
-              <a-button size="small" type="primary" ghost @click="openCreateModal">新增条款</a-button>
+              <a-button size="small" type="primary" ghost @click="openCreateClauseModal">
+                新增条款
+              </a-button>
             </a-space>
           </div>
           <div class="detail-meta">
@@ -332,14 +371,7 @@ onMounted(fetchData)
                   </div>
                   <a-space>
                     <a @click="openEditModal(section)">编辑</a>
-                    <a-popconfirm
-                      title="确认删除这条法律条款吗？"
-                      ok-text="删除"
-                      cancel-text="取消"
-                      @confirm="deleteClause(section)"
-                    >
-                      <a class="danger-link">删除</a>
-                    </a-popconfirm>
+                    <a class="danger-link" @click="confirmDeleteClause(section)">删除</a>
                   </a-space>
                 </div>
                 <div class="section-text">{{ section.content }}</div>
@@ -362,7 +394,11 @@ onMounted(fetchData)
     >
       <a-form ref="formRef" :model="clauseForm" :rules="clauseRules" layout="vertical">
         <a-form-item name="law_name" label="法规名称">
-          <a-input v-model:value="clauseForm.law_name" placeholder="例如：住宅专项维修资金管理办法" />
+          <a-input
+            v-model:value="clauseForm.law_name"
+            placeholder="例如：住宅专项维修资金管理办法"
+            :disabled="modalMode === 'update' || createScope === 'clause'"
+          />
         </a-form-item>
         <a-form-item name="clause_label" label="条款编号">
           <a-input v-model:value="clauseForm.clause_label" placeholder="例如：第十三条" />
