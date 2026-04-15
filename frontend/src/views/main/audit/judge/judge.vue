@@ -3,6 +3,14 @@ import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { judgeAuditEngine } from '@/service/audit-engine'
+import {
+  buildSubAuditView,
+  getBasisList,
+  getTopGapText,
+  getTopReasons,
+  getTopStatusLabel,
+  isHighFreqDirectReject
+} from '@/utils/audit-display-adapter'
 
 const loading = ref(false)
 const result = ref(null)
@@ -108,16 +116,14 @@ const resultTone = computed(() => {
   return 'processing'
 })
 
-function formatBoolean(value) {
-  if (value === true) return '是'
-  if (value === false) return '否'
-  return '未填写'
-}
-
-function formatResultLabel(item) {
-  if (!item || item.applicable === false) return '不适用'
-  return item.display_result || item.result || '-'
-}
+const summaryStatus = computed(() => getTopStatusLabel(result.value?.overall_result, result.value?.display_result))
+const summaryGapText = computed(() => getTopGapText(result.value?.summary_conclusion || {}))
+const summaryReasons = computed(() => getTopReasons(result.value))
+const summaryBasis = computed(() => getBasisList(result.value?.basis_documents || []))
+const isDirectReject = computed(() => isHighFreqDirectReject(result.value?.audit_path || []))
+const subAuditViews = computed(() =>
+  subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, result.value?.sub_audits?.[meta.key]))
+)
 
 function buildPayload() {
   const payload = { project_name: String(form.project_name || '').trim() }
@@ -215,106 +221,48 @@ async function runAudit() {
           />
           <a-descriptions size="small" bordered :column="1">
             <a-descriptions-item label="项目名称">{{ result.project_name }}</a-descriptions-item>
-            <a-descriptions-item label="审计状态">
-              {{ result.display_result }}（内部结果：{{ result.overall_result }}）
-            </a-descriptions-item>
-            <a-descriptions-item label="缺口摘要">
-              {{
-                result.summary_conclusion?.gap_categories?.length
-                  ? result.summary_conclusion.gap_categories.join(' / ')
-                  : '暂无明显缺口'
-              }}
-            </a-descriptions-item>
+            <a-descriptions-item label="主结论">{{ summaryStatus }}</a-descriptions-item>
+            <a-descriptions-item label="缺口说明">{{ summaryGapText }}</a-descriptions-item>
             <a-descriptions-item label="原因说明">
               <a-space direction="vertical" size="small">
-                <span v-for="item in result.reasons || []" :key="item">{{ item }}</span>
-                <span v-if="!(result.reasons || []).length">暂无明确原因说明</span>
+                <span v-for="item in summaryReasons" :key="item">{{ item }}</span>
               </a-space>
             </a-descriptions-item>
-            <a-descriptions-item label="原因码">
-              <a-space wrap>
-                <a-tag v-for="code in result.reason_codes || []" :key="code" color="processing">{{ code }}</a-tag>
-                <span v-if="!(result.reason_codes || []).length">暂无原因码</span>
-              </a-space>
-            </a-descriptions-item>
-            <a-descriptions-item label="依据">
+            <a-descriptions-item label="参考依据">
               <a-space direction="vertical" size="small">
-                <span
-                  v-for="doc in result.basis_documents || []"
-                  :key="`${doc.title}-${doc.document_no}-${doc.article}-${doc.section}`"
-                >
-                  {{ doc.display_name || doc.title || '未命名依据' }}
-                </span>
-                <span v-if="!(result.basis_documents || []).length">暂无明确法规依据展示</span>
+                <span v-for="doc in summaryBasis" :key="doc">{{ doc }}</span>
               </a-space>
             </a-descriptions-item>
           </a-descriptions>
 
-          <a-collapse>
-            <a-collapse-panel key="subaudits" header="分项审计结果（点击展开）">
-              <a-space direction="vertical" size="middle" style="width: 100%">
+          <a-collapse :default-active-key="['subaudits']">
+            <a-collapse-panel key="subaudits" header="分项审计结果">
+              <a-alert
+                v-if="isDirectReject"
+                type="info"
+                show-icon
+                class="sub-audit-direct-reject-note"
+                message="该事项已判定为不纳入维修资金，后续审计环节不适用"
+              />
+              <a-space v-else direction="vertical" size="middle" style="width: 100%">
                 <a-card
-                  v-for="meta in subAuditMeta"
-                  :key="meta.key"
+                  v-for="item in subAuditViews"
+                  :key="item.key"
                   size="small"
-                  :title="meta.title"
+                  :title="item.title"
                   class="sub-audit-card"
+                  :class="`sub-audit-card--${item.tone}`"
                 >
-                  <a-descriptions size="small" :column="1" bordered>
+                  <a-descriptions size="small" :column="1">
                     <a-descriptions-item label="结论">
-                      {{ formatResultLabel(result.sub_audits?.[meta.key]) }}
+                      {{ item.status }}
                     </a-descriptions-item>
-                    <a-descriptions-item label="原因说明">
+                    <a-descriptions-item label="简短说明">
+                      {{ item.brief }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="参考依据">
                       <a-space direction="vertical" size="small">
-                        <span
-                          v-for="reason in result.sub_audits?.[meta.key]?.reasons || []"
-                          :key="reason"
-                        >
-                          {{ reason }}
-                        </span>
-                        <span v-if="!(result.sub_audits?.[meta.key]?.reasons || []).length">
-                          暂无明确原因说明
-                        </span>
-                      </a-space>
-                    </a-descriptions-item>
-                    <a-descriptions-item label="当前缺失项">
-                      <a-space wrap>
-                        <a-tag
-                          v-for="item in result.sub_audits?.[meta.key]?.missing_items || []"
-                          :key="item"
-                        >
-                          {{ item }}
-                        </a-tag>
-                        <span v-if="!(result.sub_audits?.[meta.key]?.missing_items || []).length">
-                          暂无明确缺失项
-                        </span>
-                      </a-space>
-                    </a-descriptions-item>
-                    <a-descriptions-item label="本次检查过的事实">
-                      <a-space wrap>
-                        <a-tag
-                          v-for="item in result.sub_audits?.[meta.key]?.facts_used || []"
-                          :key="item"
-                          color="blue"
-                        >
-                          {{ item }}
-                        </a-tag>
-                        <span v-if="!(result.sub_audits?.[meta.key]?.facts_used || []).length">
-                          暂无可展示的核查字段
-                        </span>
-                      </a-space>
-                    </a-descriptions-item>
-                    <a-descriptions-item label="依据">
-                      <a-space direction="vertical" size="small">
-                        <span
-                          v-for="doc in result.sub_audits?.[meta.key]?.basis_documents || []"
-                          :key="`${meta.key}-${doc.title}-${doc.document_no}-${doc.article}-${doc.section}`"
-                        >
-                          {{ doc.display_name || doc.title || '未命名依据' }}
-                        </span>
-                        <span v-if="!(result.sub_audits?.[meta.key]?.basis_documents || []).length">
-                          暂无明确依据展示
-                        </span>
+                        <span v-for="basis in item.basis.slice(0, 2)" :key="`${item.key}-${basis}`">{{ basis }}</span>
                       </a-space>
                     </a-descriptions-item>
                   </a-descriptions>
@@ -322,31 +270,6 @@ async function runAudit() {
               </a-space>
             </a-collapse-panel>
           </a-collapse>
-
-          <a-card size="small" title="技术信息">
-            <a-descriptions size="small" :column="1">
-              <a-descriptions-item label="匹配对象">
-                <a-space direction="vertical" size="small">
-                  <span v-for="item in result.mapped_objects || []" :key="item.id">
-                    {{ item.full_path }}（匹配分：{{ item.match_score }}）
-                  </span>
-                  <span v-if="!(result.mapped_objects || []).length">未命中明确对象目录</span>
-                </a-space>
-              </a-descriptions-item>
-              <a-descriptions-item label="标准标签">
-                <a-space wrap>
-                  <a-tag v-for="tag in result.normalized_tags || []" :key="tag">{{ tag }}</a-tag>
-                  <span v-if="!(result.normalized_tags || []).length">暂无标签</span>
-                </a-space>
-              </a-descriptions-item>
-              <a-descriptions-item label="审计路径">
-                <a-space wrap>
-                  <a-tag v-for="step in result.audit_path || []" :key="step" color="purple">{{ step }}</a-tag>
-                  <span v-if="!(result.audit_path || []).length">暂无审计路径</span>
-                </a-space>
-              </a-descriptions-item>
-            </a-descriptions>
-          </a-card>
         </template>
       </a-space>
     </a-card>
@@ -395,6 +318,30 @@ async function runAudit() {
 }
 
 .sub-audit-card :deep(.ant-card-body) {
-  padding: 0;
+  padding: 8px 0 0;
+}
+
+.sub-audit-direct-reject-note {
+  margin-bottom: 4px;
+}
+
+.sub-audit-card {
+  border-left: 4px solid #d9d9d9;
+}
+
+.sub-audit-card--success {
+  border-left-color: #52c41a;
+}
+
+.sub-audit-card--warning {
+  border-left-color: #faad14;
+}
+
+.sub-audit-card--risk {
+  border-left-color: #ff4d4f;
+}
+
+.sub-audit-card--na {
+  border-left-color: #8c8c8c;
 }
 </style>
