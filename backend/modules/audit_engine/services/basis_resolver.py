@@ -61,6 +61,7 @@ def _normalize_fallback_sources(fallback_sources: Optional[Iterable[Any]]) -> Li
 def resolve_basis_documents(
     reason_codes: Sequence[str],
     fallback_sources: Optional[Iterable[Dict[str, Any]]] = None,
+    use_fallback: bool = False,
 ) -> List[Dict[str, Any]]:
     collected: List[Tuple[int, int, Dict[str, Any]]] = []
 
@@ -75,7 +76,7 @@ def resolve_basis_documents(
                 )
             )
 
-    if not collected:
+    if use_fallback and not collected:
         for fallback_index, source in enumerate(_normalize_fallback_sources(fallback_sources)):
             collected.append((1, 10_000 + fallback_index, source))
 
@@ -89,3 +90,7 @@ def resolve_basis_documents(
         deduped.append((priority, order, document))
 
     return [item[2] for item in deduped]
+
+
+def build_from_reason_codes(reason_codes: Sequence[str]) -> List[Dict[str, Any]]:
+    return resolve_basis_documents(reason_codes, use_fallback=False)

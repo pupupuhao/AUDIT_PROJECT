@@ -138,9 +138,18 @@
     "MISSING_SETTLEMENT_REPORT": "缺少结算材料",
     "MISSING_PAYMENT_PROOF": "缺少付款凭证",
     "MISSING_SITE_PHOTOS": "缺少现场照片",
+    "MISSING_CONSTRUCTION_PLAN": "缺少施工方案",
     "MISSING_RECTIFICATION_NOTICE": "缺少整改通知/鉴定材料",
     "MISSING_COMPLETION_REPORT": "缺少完工/验收材料",
     "MISSING_EMERGENCY_DOC": "缺少紧急维修证明材料",
+    "MISSING_APPLICATION_DATE": "缺少申请时间信息",
+    "MISSING_VOTE_DATE": "缺少表决时间信息",
+    "INVALID_TIMELINE_SEQUENCE": "关键时间顺序异常",
+    "MISSING_AMOUNT": "缺少申请金额信息",
+    "MISSING_BUDGET_AMOUNT": "缺少预算金额信息",
+    "MISSING_APPROVED_AMOUNT": "缺少核准金额信息",
+    "MISSING_AMOUNT_BASIS": "缺少金额依据材料",
+    "EMERGENCY_ELEVATOR_HAZARD": "电梯应急风险场景",
     "WITHIN_WARRANTY": "属于保修期内",
     "OUTSIDE_SCOPE_PRIVATE_PART": "属于专有部分",
     "OUTSIDE_SCOPE_UNKNOWN_OBJECT": "无法确认维修对象",
@@ -1334,7 +1343,7 @@
       },
       "then": {
         "result": "manual_review",
-        "reason_codes": ["INSUFFICIENT_INFO"],
+        "reason_codes": ["INVALID_TIMELINE_SEQUENCE"],
         "message": "时序存在明显逆序（表决早于申请），建议人工复核"
       },
       "source": {
@@ -1367,7 +1376,7 @@
       },
       "then": {
         "result": "manual_review",
-        "reason_codes": ["INSUFFICIENT_INFO"],
+        "reason_codes": ["INVALID_TIMELINE_SEQUENCE"],
         "message": "时序存在明显逆序（公示早于表决），建议人工复核"
       },
       "source": {
@@ -1444,7 +1453,7 @@
       },
       "then": {
         "result": "manual_review",
-        "reason_codes": ["INSUFFICIENT_INFO"],
+        "reason_codes": ["MISSING_AMOUNT_BASIS"],
         "message": "金额偏差超过阈值，建议人工复核"
       },
       "source": {

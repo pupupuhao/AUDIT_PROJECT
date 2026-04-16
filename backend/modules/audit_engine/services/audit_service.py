@@ -3,7 +3,7 @@ from functools import lru_cache
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from modules.audit_engine.services.basis_resolver import resolve_basis_documents
+from modules.audit_engine.services.basis_resolver import build_from_reason_codes
 from modules.audit_engine.services.rule_loader import rule_file_path
 
 
@@ -58,6 +58,27 @@ EXCLUSION_REASON_CODES = {
 SCOPE_REASON_CODES = {
     "IN_SCOPE_COMMON_PART",
     "IN_SCOPE_COMMON_FACILITY",
+}
+PROCESS_MISSING_CODE_MAP = {
+    "has_vote": "MISSING_VOTE",
+    "has_announcement": "MISSING_ANNOUNCEMENT",
+    "has_contract": "MISSING_CONTRACT",
+    "has_budget_review": "MISSING_BUDGET_REVIEW",
+}
+DOCUMENT_MISSING_CODE_MAP = {
+    "has_invoice": "MISSING_INVOICE",
+    "has_completion_report": "MISSING_COMPLETION_REPORT",
+    "has_site_photos": "MISSING_SITE_PHOTOS",
+    "has_construction_plan": "MISSING_CONSTRUCTION_PLAN",
+}
+TIMELINE_MISSING_CODE_MAP = {
+    "application_date": "MISSING_APPLICATION_DATE",
+    "vote_date": "MISSING_VOTE_DATE",
+}
+AMOUNT_MISSING_CODE_MAP = {
+    "amount": "MISSING_AMOUNT",
+    "budget_amount": "MISSING_BUDGET_AMOUNT",
+    "approved_amount": "MISSING_APPROVED_AMOUNT",
 }
 
 
@@ -383,36 +404,6 @@ def _append_unique(items: List[str], values: Iterable[str]) -> None:
             items.append(value)
 
 
-def _build_basis_documents(triggered_rules: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    basis_documents: List[Dict[str, Any]] = []
-    seen: Set[Tuple[Any, ...]] = set()
-    for rule in triggered_rules:
-        source = rule.get("source")
-        if not source:
-            continue
-        key = (
-            source.get("display_name"),
-            source.get("title"),
-            source.get("article"),
-            source.get("section"),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        basis_documents.append(
-            {
-                "display_name": source.get("display_name"),
-                "source_type": source.get("source_type"),
-                "title": source.get("title"),
-                "issuer": source.get("issuer"),
-                "document_no": source.get("document_no"),
-                "article": source.get("article"),
-                "section": source.get("section"),
-            }
-        )
-    return basis_documents
-
-
 def _build_display_result(overall_result: str) -> str:
     return load_output_schema()["display_mapping"][overall_result]
 
@@ -471,6 +462,58 @@ def _collect_required_missing_fields(context: Dict[str, Any], field_names: Seque
     return missing
 
 
+def _supplement_sub_audit_reason_codes(
+    sub_audit_key: str,
+    sub_audit_result: Dict[str, Any],
+    definition: Dict[str, Any],
+    context: Dict[str, Any],
+) -> None:
+    if not sub_audit_result or sub_audit_result.get("applicable") is False:
+        return
+
+    reason_codes: List[str] = list(sub_audit_result.get("reason_codes", []))
+    missing_items: List[str] = list(sub_audit_result.get("missing_items", []))
+    if not missing_items:
+        missing_items = _collect_required_missing_fields(context, definition.get("required_fields", []))
+        sub_audit_result["missing_items"] = missing_items
+
+    if sub_audit_key == "process_audit":
+        for field_name in missing_items:
+            code = PROCESS_MISSING_CODE_MAP.get(field_name)
+            if code:
+                _append_unique(reason_codes, [code])
+    elif sub_audit_key == "document_completeness_audit":
+        for field_name in missing_items:
+            code = DOCUMENT_MISSING_CODE_MAP.get(field_name)
+            if code:
+                _append_unique(reason_codes, [code])
+    elif sub_audit_key == "timeline_audit":
+        for field_name in missing_items:
+            code = TIMELINE_MISSING_CODE_MAP.get(field_name)
+            if code:
+                _append_unique(reason_codes, [code])
+        reasons = sub_audit_result.get("reasons", []) or []
+        if any("顺序" in str(reason) or "逆序" in str(reason) for reason in reasons):
+            _append_unique(reason_codes, ["INVALID_TIMELINE_SEQUENCE"])
+    elif sub_audit_key == "amount_audit":
+        for field_name in missing_items:
+            code = AMOUNT_MISSING_CODE_MAP.get(field_name)
+            if code:
+                _append_unique(reason_codes, [code])
+        if (
+            context.get("budget_amount") is None
+            and context.get("approved_amount") is None
+            and context.get("amount") is not None
+        ):
+            _append_unique(reason_codes, ["MISSING_AMOUNT_BASIS"])
+
+    if "INSUFFICIENT_INFO" in reason_codes and any(str(code).startswith("MISSING_") for code in reason_codes):
+        reason_codes = [code for code in reason_codes if code != "INSUFFICIENT_INFO"]
+
+    sub_audit_result["reason_codes"] = reason_codes
+    sub_audit_result["basis_documents"] = build_from_reason_codes(reason_codes)
+
+
 def _build_sub_audit_result(
     sub_audit_key: str,
     definition: Dict[str, Any],
@@ -515,10 +558,7 @@ def _build_sub_audit_result(
                 "reason_codes": reason_codes,
                 "reasons": [then["message"]] if then.get("message") else [],
                 "missing_items": [],
-                "basis_documents": resolve_basis_documents(
-                    reason_codes,
-                    fallback_sources=_build_basis_documents([rule]),
-                ),
+                "basis_documents": build_from_reason_codes(reason_codes),
                 "audit_path": [stage_path, sub_audit_key],
                 "facts_used": rule_facts_used,
             }
@@ -530,10 +570,7 @@ def _build_sub_audit_result(
             "reason_codes": reason_codes,
             "reasons": [then["message"]],
             "missing_items": _collect_missing_items(rule["when"], context),
-            "basis_documents": resolve_basis_documents(
-                reason_codes,
-                fallback_sources=_build_basis_documents([rule]),
-            ),
+            "basis_documents": build_from_reason_codes(reason_codes),
             "audit_path": [stage_path, sub_audit_key],
             "facts_used": rule_facts_used,
         }
@@ -547,7 +584,7 @@ def _build_sub_audit_result(
         "reason_codes": default_reason_codes,
         "reasons": [definition["default_message"]] if definition.get("default_message") else [],
         "missing_items": _collect_required_missing_fields(context, definition.get("required_fields", [])),
-        "basis_documents": resolve_basis_documents(default_reason_codes),
+        "basis_documents": build_from_reason_codes(default_reason_codes),
         "audit_path": list(definition.get("default_audit_path", [])),
         "facts_used": facts_used,
     }
@@ -556,7 +593,9 @@ def _build_sub_audit_result(
 def _build_sub_audits(context: Dict[str, Any], ordered_rules: Sequence[Dict[str, Any]], engine: Dict[str, Any]) -> Dict[str, Any]:
     sub_audits: Dict[str, Any] = {}
     for sub_audit_key, definition in engine.get("sub_audit_definitions", {}).items():
-        sub_audits[sub_audit_key] = _build_sub_audit_result(sub_audit_key, definition, context, ordered_rules)
+        sub_result = _build_sub_audit_result(sub_audit_key, definition, context, ordered_rules)
+        _supplement_sub_audit_reason_codes(sub_audit_key, sub_result, definition, context)
+        sub_audits[sub_audit_key] = sub_result
     return sub_audits
 
 
@@ -774,10 +813,7 @@ def audit_project(request_payload: Dict[str, Any], mapping_result: Dict[str, Any
         "display_result": _build_display_result(result),
         "reason_codes": reason_codes,
         "reasons": reasons,
-        "basis_documents": resolve_basis_documents(
-            reason_codes,
-            fallback_sources=_build_basis_documents(triggered_rules),
-        ),
+        "basis_documents": build_from_reason_codes(reason_codes),
         "missing_items": missing_items,
         "audit_path": audit_path,
         "manual_review_required": manual_review_required,

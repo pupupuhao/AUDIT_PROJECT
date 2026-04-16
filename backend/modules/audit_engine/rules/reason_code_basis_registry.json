@@ -142,12 +142,12 @@
     ],
     "MISSING_CONTRACT": [
       {
-        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十七条",
+        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十四条",
         "source_type": "regulation",
         "title": "上海市商品住宅维修基金管理办法",
         "issuer": "上海市人民政府",
         "document_no": "91号令",
-        "article": "第十七条",
+        "article": "第十四条",
         "section": "",
         "primary": true
       }
@@ -166,24 +166,24 @@
     ],
     "MISSING_BUDGET_REVIEW": [
       {
-        "display_name": "审价制度（系统规则）",
-        "source_type": "system_rule",
-        "title": "审价制度",
-        "issuer": "",
-        "document_no": "",
-        "article": "",
+        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十七条",
+        "source_type": "regulation",
+        "title": "上海市商品住宅维修基金管理办法",
+        "issuer": "上海市人民政府",
+        "document_no": "91号令",
+        "article": "第十七条",
         "section": "",
         "primary": true
       }
     ],
     "MISSING_ANNOUNCEMENT": [
       {
-        "display_name": "公示制度（系统规则）",
-        "source_type": "system_rule",
-        "title": "公示制度",
-        "issuer": "",
-        "document_no": "",
-        "article": "",
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十二条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十二条",
         "section": "",
         "primary": true
       }
@@ -260,11 +260,119 @@
     ],
     "MISSING_EMERGENCY_DOC": [
       {
-        "display_name": "紧急维修备案与支取阶段（系统规则）",
-        "source_type": "system_rule",
-        "title": "紧急维修备案与支取阶段",
-        "issuer": "",
-        "document_no": "",
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十四条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十四条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_CONSTRUCTION_PLAN": [
+      {
+        "display_name": "《住宅物业管理服务规范》（DB31/T 360—2020）第4.8.2",
+        "source_type": "standard",
+        "title": "住宅物业管理服务规范",
+        "issuer": "上海市市场监督管理局",
+        "document_no": "DB31/T 360—2020",
+        "article": "",
+        "section": "第4.8.2",
+        "primary": true
+      }
+    ],
+    "MISSING_APPLICATION_DATE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十二条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十二条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_VOTE_DATE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十二条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十二条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "INVALID_TIMELINE_SEQUENCE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十二条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十二条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_AMOUNT": [
+      {
+        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十七条",
+        "source_type": "regulation",
+        "title": "上海市商品住宅维修基金管理办法",
+        "issuer": "上海市人民政府",
+        "document_no": "91号令",
+        "article": "第十七条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_BUDGET_AMOUNT": [
+      {
+        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十七条",
+        "source_type": "regulation",
+        "title": "上海市商品住宅维修基金管理办法",
+        "issuer": "上海市人民政府",
+        "document_no": "91号令",
+        "article": "第十七条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_APPROVED_AMOUNT": [
+      {
+        "display_name": "《上海市商品住宅维修基金管理办法》（91号令）第十七条",
+        "source_type": "regulation",
+        "title": "上海市商品住宅维修基金管理办法",
+        "issuer": "上海市人民政府",
+        "document_no": "91号令",
+        "article": "第十七条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "MISSING_AMOUNT_BASIS": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "EMERGENCY_ELEVATOR_HAZARD": [
+      {
+        "display_name": "《关于贯彻落实〈关于进一步发挥住宅专项维修资金在老旧小区和电梯更新改造中支持作用的通知〉有关事项的通知》（沪房管物〔2011〕326号）",
+        "source_type": "regulation",
+        "title": "关于贯彻落实〈关于进一步发挥住宅专项维修资金在老旧小区和电梯更新改造中支持作用的通知〉有关事项的通知",
+        "issuer": "上海市住房保障和房屋管理局",
+        "document_no": "沪房管物〔2011〕326号",
         "article": "",
         "section": "",
         "primary": true
