@@ -38,11 +38,17 @@ const boolSelectOptions = [
   { label: '否', value: false }
 ]
 
+const propertySelectOptions = [
+  { label: '未填写', value: undefined },
+  { label: '一般维修（1）', value: 1 },
+  { label: '急修（2）', value: 2 }
+]
+
 const optionalFieldGroups = [
   {
     title: '工程主表 / 预案',
     fields: [
-      { key: 'property', label: '工程性质 property', type: 'number' },
+      { key: 'property', label: '工程性质 property', type: 'property' },
       { key: 'expirer_remark', label: '保修备注', type: 'text' }
     ]
   },
@@ -121,7 +127,7 @@ function buildPayload() {
       blueprint_draft: {
         wsname: projectName,
         property: form.property,
-        expirer_remark: form.expirer_remark || undefined
+        expirer_remark: form.expirer_remark ?? ''
       },
       ws_project: {
         is_signed_pc: form.is_signed_pc,
@@ -213,6 +219,12 @@ async function runAudit() {
                       <a-input
                         v-if="field.type === 'text'"
                         v-model:value="form[field.key]"
+                        style="width: 100%"
+                      />
+                      <a-select
+                        v-else-if="field.type === 'property'"
+                        v-model:value="form[field.key]"
+                        :options="propertySelectOptions"
                         style="width: 100%"
                       />
                       <a-input-number

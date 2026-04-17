@@ -30,6 +30,8 @@ TRACE_FIELDS = [
     "has_appraisal_report",
 ]
 PROCESS_FIELDS = [
+    "property_raw_value",
+    "property_value_valid",
     "repair_nature",
     "is_emergency_repair",
     "has_vote_trace",
@@ -60,6 +62,7 @@ PROCESS_CODES = {
     "PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW",
     "PROCESS_EMERGENCY_FLOW_EXEMPTED",
     "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED",
+    "PROCESS_PROPERTY_VALUE_UNSUPPORTED",
 }
 AMOUNT_CODES = {"AMOUNT_BUDGET_DISPLAY", "AMOUNT_CONTRACT_DISPLAY", "AMOUNT_INFO_MISSING"}
 
@@ -232,6 +235,16 @@ def _audit_trace(fields: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _audit_process(fields: Dict[str, Any], trace_result: Dict[str, Any]) -> Dict[str, Any]:
+    if fields.get("property_value_valid") is False:
+        return _result(
+            "manual_review",
+            ["PROCESS_PROPERTY_VALUE_UNSUPPORTED"],
+            ["工程性质 property 值不在当前支持范围内（仅支持 1=一般维修、2=急修），未按普通维修静默处理。"],
+            ["property"],
+            ["field_mapping_layer", "process_audit", "property_value_unsupported"],
+            PROCESS_FIELDS,
+        )
+
     if fields.get("repair_nature") == "emergency" or fields.get("is_emergency_repair") is True:
         codes = ["PROCESS_EMERGENCY_FLOW_EXEMPTED"]
         reasons = ["紧急维修仅豁免普通维修流程，不豁免项目本体合规。"]
@@ -318,7 +331,10 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     entity = sub_audits["entity_audit"]
     trace = sub_audits["trace_audit"]
     process = sub_audits["process_audit"]
-    if entity["result"] == "non_compliant":
+    if "PROCESS_PROPERTY_VALUE_UNSUPPORTED" in process.get("reason_codes", []):
+        overall = "manual_review"
+        primary = process
+    elif entity["result"] == "non_compliant":
         overall = "non_compliant"
         primary = entity
     elif entity["result"] == "manual_review":

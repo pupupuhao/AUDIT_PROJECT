@@ -14,9 +14,17 @@
       "type": "boolean",
       "comment": "是否紧急维修；当前版本仅区分普通维修和紧急维修。"
     },
+    "property_raw_value": {
+      "type": "string|null",
+      "comment": "工程性质 property 原始值，仅用于解释和人工复核。当前版本仅支持 1=一般维修、2=急修。"
+    },
+    "property_value_valid": {
+      "type": "boolean",
+      "comment": "property 是否属于当前支持范围；非法值不得静默当普通维修处理。"
+    },
     "repair_nature": {
       "type": "enum",
-      "comment": "维修性质：normal 表示普通维修，emergency 表示紧急维修。"
+      "comment": "维修性质：normal 表示普通维修，emergency 表示紧急维修，unknown 表示 property 非法或无法支持。"
     },
     "is_public_part": {
       "type": "boolean|null",
@@ -32,7 +40,7 @@
     },
     "warranty_status": {
       "type": "enum|null",
-      "comment": "保修状态。当前仅按 expirer_remark 展示口径推导，不能替代正式保修期认定。"
+      "comment": "保修状态。当前仅按 expirer_remark 展示口径推导；缺失和空字符串均按 in_warranty 处理，不能替代正式保修期认定。"
     },
     "has_vote_trace": {
       "type": "boolean",

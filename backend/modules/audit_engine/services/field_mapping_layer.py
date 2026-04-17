@@ -208,8 +208,8 @@ def _map_project_item_code(sources: Dict[str, Dict[str, Any]]) -> Tuple[Optional
     return str(value), _record("project_item_code", str(value), source or "", field)
 
 
-def _map_is_emergency(sources: Dict[str, Dict[str, Any]]) -> Tuple[bool, Dict[str, Any]]:
-    value, source, field = _first_non_empty(
+def _map_property_fields(sources: Dict[str, Dict[str, Any]]) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+    value, source, field = _first_existing(
         sources,
         (
             ("t_workspace", "property"),
@@ -217,8 +217,33 @@ def _map_is_emergency(sources: Dict[str, Dict[str, Any]]) -> Tuple[bool, Dict[st
             ("blueprint_draft", "property"),
         ),
     )
-    result = str(value).strip() == "2" if _is_present(value) else False
-    return result, _record("is_emergency_repair", result, source or "default", field or "property")
+    records: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    raw_value = None if value is None else str(value).strip()
+    fields: Dict[str, Any] = {
+        "property_raw_value": raw_value,
+        "property_value_valid": True,
+    }
+
+    if raw_value == "1" or raw_value in (None, ""):
+        fields["is_emergency_repair"] = False
+        fields["repair_nature"] = "normal"
+    elif raw_value == "2":
+        fields["is_emergency_repair"] = True
+        fields["repair_nature"] = "emergency"
+    else:
+        fields["is_emergency_repair"] = None
+        fields["repair_nature"] = "unknown"
+        fields["property_value_valid"] = False
+        warnings.append("property 值不在当前支持范围内（仅支持 1/2），需人工复核。")
+
+    source_name = source or "default"
+    source_field = field or "property"
+    records.append(_record("property_raw_value", raw_value, source_name, source_field))
+    records.append(_record("property_value_valid", fields["property_value_valid"], source_name, source_field))
+    records.append(_record("is_emergency_repair", fields["is_emergency_repair"], source_name, source_field))
+    records.append(_record("repair_nature", fields["repair_nature"], "derived", "is_emergency_repair"))
+    return fields, records, warnings
 
 
 def _map_warranty_status(sources: Dict[str, Dict[str, Any]]) -> Tuple[Optional[str], Optional[Dict[str, Any]], List[str]]:
@@ -230,11 +255,15 @@ def _map_warranty_status(sources: Dict[str, Dict[str, Any]]) -> Tuple[Optional[s
         ),
     )
     warnings: List[str] = []
-    if value is None:
-        return None, None, warnings
+    if source is None:
+        # Demo口径：当前数据集为了稳定展示，expirer_remark 字段缺失也按 in_warranty 处理。
+        # 这不是正式保修期认定规则，后续接入完整保修字段后应替换为真实业务口径。
+        source = "default"
+        field = "expirer_remark"
+        value = ""
     text = str(value or "").strip()
     status = "out_of_warranty" if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS) else "in_warranty"
-    warnings.append("warranty_status 仅按 expirer_remark 当前展示口径推导，不能替代正式保修期认定。")
+    warnings.append("warranty_status 仅按 expirer_remark 当前数据集展示口径推导；缺失和空字符串均按 in_warranty 处理，不能替代正式保修期认定。")
     return status, _record("warranty_status", status, source or "", field), warnings
 
 
@@ -384,11 +413,10 @@ def build_field_mapping_layer(payload: Dict[str, Any]) -> Dict[str, Any]:
         standard_fields["project_item_code"] = project_item_code
         records.append(project_item_code_record)
 
-    is_emergency, emergency_record = _map_is_emergency(sources)
-    standard_fields["is_emergency_repair"] = is_emergency
-    records.append(emergency_record)
-    standard_fields["repair_nature"] = "emergency" if is_emergency else "normal"
-    records.append(_record("repair_nature", standard_fields["repair_nature"], "derived", "is_emergency_repair"))
+    property_fields, property_records, property_warnings = _map_property_fields(sources)
+    standard_fields.update(property_fields)
+    records.extend(property_records)
+    warnings.extend(property_warnings)
 
     warranty_status, warranty_record, warranty_warnings = _map_warranty_status(sources)
     if warranty_record:

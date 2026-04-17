@@ -42,14 +42,32 @@
         { "source": "blueprint", "field": "property" },
         { "source": "blueprint_draft", "field": "property" }
       ],
-      "mapping_rule": "property == 2 映射为 true；其他值映射为 false。当前版本仅区分普通维修 / 紧急维修。"
+      "mapping_rule": "property == 1 映射为 false；property == 2 映射为 true；其他非空值不静默处理，property_value_valid=false 并进入人工复核。当前版本仅支持 1/2。"
+    },
+    {
+      "standard_field": "property_raw_value",
+      "sources": [
+        { "source": "t_workspace", "field": "property" },
+        { "source": "blueprint", "field": "property" },
+        { "source": "blueprint_draft", "field": "property" }
+      ],
+      "mapping_rule": "记录 property 原始值，仅用于解释和人工复核。"
+    },
+    {
+      "standard_field": "property_value_valid",
+      "sources": [
+        { "source": "t_workspace", "field": "property" },
+        { "source": "blueprint", "field": "property" },
+        { "source": "blueprint_draft", "field": "property" }
+      ],
+      "mapping_rule": "property 缺失、为空、1、2 为当前可处理范围；其他值为 false，并写入 field_mapping_layer.warnings。"
     },
     {
       "standard_field": "repair_nature",
       "sources": [
         { "source": "derived", "field": "is_emergency_repair" }
       ],
-      "mapping_rule": "is_emergency_repair 为 true 时映射为 emergency，否则映射为 normal。"
+      "mapping_rule": "is_emergency_repair 为 true 时映射为 emergency；false 时映射为 normal；property 非法时映射为 unknown。"
     },
     {
       "standard_field": "warranty_status",
@@ -57,7 +75,7 @@
         { "source": "blueprint", "field": "expirer_remark" },
         { "source": "blueprint_draft", "field": "expirer_remark" }
       ],
-      "mapping_rule": "expirer_remark 为空 -> in_warranty；包含“过保”等 -> out_of_warranty；其他 -> in_warranty。仅适用于当前数据展示。"
+      "mapping_rule": "expirer_remark 缺失或为空 -> in_warranty；包含“过保”等 -> out_of_warranty；其他 -> in_warranty。仅适用于当前数据展示，不代表正式保修期认定。"
     },
     {
       "standard_field": "has_construction_contract",

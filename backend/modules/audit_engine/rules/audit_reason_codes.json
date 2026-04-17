@@ -21,7 +21,8 @@
       "PROCESS_NORMAL_VOTE_NOT_LEGAL": "普通维修表决通过率未达到当前口径或无法确认。",
       "PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW": "普通维修流程时序需要人工复核。",
       "PROCESS_EMERGENCY_FLOW_EXEMPTED": "紧急维修仅豁免普通流程，不豁免本体合规。",
-      "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED": "紧急维修资料痕迹仍需补充或人工复核。"
+      "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED": "紧急维修资料痕迹仍需补充或人工复核。",
+      "PROCESS_PROPERTY_VALUE_UNSUPPORTED": "工程性质 property 值不在当前支持范围内，需人工复核输入口径。"
     },
     "amount": {
       "AMOUNT_BUDGET_DISPLAY": "预算金额展示项。",

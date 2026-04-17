@@ -37,6 +37,7 @@ const REASON_CODE_BRIEF = {
   PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '普通维修流程时序需复核',
   PROCESS_EMERGENCY_FLOW_EXEMPTED: '紧急维修豁免普通流程',
   PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '紧急维修仍需补充事后资料',
+  PROCESS_PROPERTY_VALUE_UNSUPPORTED: '工程性质字段值需人工复核',
   AMOUNT_BUDGET_DISPLAY: '预算金额展示',
   AMOUNT_CONTRACT_DISPLAY: '合同金额展示',
   AMOUNT_INFO_MISSING: '金额信息缺失'
@@ -84,12 +85,19 @@ export function getTopGapText(summaryConclusion = {}) {
 }
 
 export function getBasisList(basisDocuments) {
-  const values = (basisDocuments || [])
+  const documents = basisDocuments || []
+  const formalValues = documents
     .filter((item) => isFormalBasisSourceType(item?.source_type))
     .map((item) => item?.display_name || item?.title)
     .filter(Boolean)
-  const deduped = dedupeStrings(values)
-  return deduped.length ? deduped : ['系统审计规则（基于四层审计结构）']
+  const formalDeduped = dedupeStrings(formalValues)
+  if (formalDeduped.length) return formalDeduped
+
+  const nonFormalValues = documents.map((item) => item?.display_name || item?.title).filter(Boolean)
+  const nonFormalDeduped = dedupeStrings(nonFormalValues)
+  if (nonFormalDeduped.length) return nonFormalDeduped
+
+  return ['当前为业务痕迹/系统规则提示，暂无明确法规展示']
 }
 
 function getSubTone(item) {
@@ -125,6 +133,6 @@ export function buildSubAuditView(key, title, item) {
     tone: getSubTone(item),
     status: getSubStatus(item),
     brief: getSubBrief(key, item),
-    basis: getBasisList(item?.basis_documents || [])
+    basis: key === 'amount_info' ? ['金额层仅展示，不绑定法规依据'] : getBasisList(item?.basis_documents || [])
   }
 }
