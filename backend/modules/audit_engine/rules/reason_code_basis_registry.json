@@ -114,14 +114,16 @@
     ],
     "ENTITY_IN_WARRANTY": [
       {
-        "display_name": "保修责任优先口径（当前数据展示）",
+        "display_name": "保修状态展示口径（当前四层审计不主动发出）",
         "source_type": "business_rule",
         "title": "维修资金项目字段映射规则",
         "issuer": "",
         "document_no": "",
         "article": "",
-        "section": "expirer_remark 映射 warranty_status；仅当前数据集展示口径",
+        "section": "expirer_remark 映射 warranty_status；仅当前数据集展示口径，不参与本轮合规结论",
         "basis_strength": "weak",
+        "current_four_layer_used": false,
+        "deprecated": true,
         "primary": true
       }
     ],
@@ -266,13 +268,65 @@
     ],
     "PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW": [
       {
-        "display_name": "普通维修流程时序复核提示",
+        "display_name": "旧版普通维修流程时序复核提示（当前四层审计不主动发出）",
         "source_type": "business_rule",
         "title": "流程合规审计",
         "issuer": "",
         "document_no": "",
         "article": "",
-        "section": "当前未实现完整 vote_date / is_before_vote_construct 时序字段",
+        "section": "已由 PROCESS_VOTE_DATE_MISSING / PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED 替代",
+        "basis_strength": "weak",
+        "current_four_layer_used": false,
+        "deprecated": true,
+        "primary": true
+      }
+    ],
+    "PROCESS_VOTE_DATE_MISSING": [
+      {
+        "display_name": "缺少表决日期，无法完成普通维修时序校验",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "缺少 vote_date 标准字段，仅提示补充核验",
+        "basis_strength": "weak",
+        "primary": true
+      }
+    ],
+    "PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二十二条、第二十三条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十二条、第二十三条",
+        "section": "普通维修表决程序",
+        "basis_strength": "strong",
+        "primary": true
+      },
+      {
+        "display_name": "《中华人民共和国民法典》第二百七十八条、第二百八十一条",
+        "source_type": "law",
+        "title": "中华人民共和国民法典",
+        "issuer": "全国人民代表大会",
+        "document_no": "",
+        "article": "第二百七十八条、第二百八十一条",
+        "section": "共同决定事项与维修资金使用",
+        "basis_strength": "strong",
+        "primary": false
+      }
+    ],
+    "PROCESS_VOTE_DATE_PROXY_USED": [
+      {
+        "display_name": "vote_date 使用征询日期或录入日期代替，仅用于展示和弱校验",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "代理日期弱提示，不单独作为违规结论",
         "basis_strength": "weak",
         "primary": true
       }

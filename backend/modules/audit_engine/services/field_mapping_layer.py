@@ -127,6 +127,15 @@ def _to_date(value: Any) -> Optional[str]:
     return None
 
 
+def _date_lt(left: Optional[str], right: Optional[str]) -> Optional[bool]:
+    if not left or not right:
+        return None
+    try:
+        return datetime.strptime(left, "%Y-%m-%d").date() < datetime.strptime(right, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def _field_comment(field_name: str) -> str:
     fields = load_standard_field_definitions().get("fields", {})
     return str(fields.get(field_name, {}).get("comment", ""))
@@ -263,7 +272,7 @@ def _map_warranty_status(sources: Dict[str, Dict[str, Any]]) -> Tuple[Optional[s
         value = ""
     text = str(value or "").strip()
     status = "out_of_warranty" if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS) else "in_warranty"
-    warnings.append("warranty_status 仅按 expirer_remark 当前数据集展示口径推导；缺失和空字符串均按 in_warranty 处理，不能替代正式保修期认定。")
+    warnings.append("warranty_status 仅按 expirer_remark 当前数据集展示口径推导；缺失和空字符串均按 in_warranty 处理，仅作展示说明，不参与本轮合规结论。")
     return status, _record("warranty_status", status, source or "", field), warnings
 
 
@@ -334,6 +343,27 @@ def _map_vote_fields(sources: Dict[str, Dict[str, Any]]) -> Tuple[Dict[str, Any]
     records.append(_record("vote_legal", mapped["vote_legal"], "hou_notion_sum", "vote_rate_fields"))
     if row_exists and mapped["vote_legal"] is None:
         warnings.append("Hou_notion_sum 存在但缺少计算通过率所需字段，vote_legal 需人工复核。")
+
+    vote_date = None
+    vote_date_source_field = None
+    vote_date_is_proxy = None
+    for source_field, is_proxy, warning in (
+        ("request_enddate", False, ""),
+        ("request_startdate", True, "当前以征询开始日期代替表决日期，仅用于展示和弱校验。"),
+        ("reg_date", True, "当前以录入日期代替表决日期，仅用于展示和弱校验。"),
+    ):
+        candidate = _to_date(row.get(_normalize_key(source_field)))
+        if candidate:
+            vote_date = candidate
+            vote_date_source_field = source_field
+            vote_date_is_proxy = is_proxy
+            if warning:
+                warnings.append(warning)
+            break
+    mapped["vote_date"] = vote_date
+    mapped["vote_date_is_proxy"] = vote_date_is_proxy
+    records.append(_record("vote_date", vote_date, "hou_notion_sum", vote_date_source_field or "request_enddate/request_startdate/reg_date"))
+    records.append(_record("vote_date_is_proxy", vote_date_is_proxy, "derived", vote_date_source_field or "vote_date"))
     return mapped, records, warnings
 
 
@@ -445,6 +475,15 @@ def build_field_mapping_layer(payload: Dict[str, Any]) -> Dict[str, Any]:
     if start_date:
         standard_fields["construction_start_date"] = start_date
         records.append(_record("construction_start_date", start_date, "project_contract", "startup_date"))
+
+    is_before_vote_construct = None
+    if standard_fields.get("repair_nature") == "normal":
+        is_before_vote_construct = _date_lt(
+            standard_fields.get("construction_start_date"),
+            standard_fields.get("vote_date"),
+        )
+    standard_fields["is_before_vote_construct"] = is_before_vote_construct
+    records.append(_record("is_before_vote_construct", is_before_vote_construct, "derived", "construction_start_date/vote_date"))
 
     for field_name, candidates in (
         (

@@ -40,7 +40,7 @@
     },
     "warranty_status": {
       "type": "enum|null",
-      "comment": "保修状态。当前仅按 expirer_remark 展示口径推导；缺失和空字符串均按 in_warranty 处理，不能替代正式保修期认定。"
+      "comment": "保修状态展示字段。当前仅按 expirer_remark 展示口径推导；缺失和空字符串均按 in_warranty 处理，不参与本轮合规结论。"
     },
     "has_vote_trace": {
       "type": "boolean",
@@ -57,6 +57,14 @@
     "vote_legal": {
       "type": "boolean|null",
       "comment": "表决是否达到当前口径；字段不足时为 null，进入人工复核。"
+    },
+    "vote_date": {
+      "type": "date|null",
+      "comment": "表决日期。优先使用 Hou_notion_sum.request_enddate；缺失时可用 request_startdate 或 reg_date 弱替代。"
+    },
+    "vote_date_is_proxy": {
+      "type": "boolean|null",
+      "comment": "vote_date 是否使用征询开始日期或录入日期代替；仅用于展示和弱校验提示。"
     },
     "need_construction_contract": {
       "type": "boolean|null",
@@ -76,7 +84,11 @@
     },
     "construction_start_date": {
       "type": "date|null",
-      "comment": "实际开工日期，用于流程解释和时序人工复核提示。"
+      "comment": "实际开工日期，用于普通维修流程时序校验。"
+    },
+    "is_before_vote_construct": {
+      "type": "boolean|null",
+      "comment": "普通维修是否已确认先开工后表决；仅在 construction_start_date 和 vote_date 均存在时计算。"
     },
     "budget_amount": {
       "type": "number|null",

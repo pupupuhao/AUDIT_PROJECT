@@ -67,7 +67,6 @@ class SummaryConclusion(BaseModel):
     type: str
     entity_pass: bool = False
     conflict_detected: bool = False
-    gap_categories: List[str] = Field(default_factory=list)
     primary_message: str = ""
     display_summary: str = ""
 
@@ -81,8 +80,10 @@ class AuditResponse(BaseModel):
     display_result: str
     reason_codes: List[str] = Field(default_factory=list)
     reasons: List[str] = Field(default_factory=list)
+    top_reasons: List[str] = Field(default_factory=list)
     basis_documents: List[BasisDocument] = Field(default_factory=list)
     missing_items: List[str] = Field(default_factory=list)
+    top_missing_items: List[str] = Field(default_factory=list)
     audit_path: List[str] = Field(default_factory=list)
     manual_review_required: bool
     sub_audits: AuditSubAudits

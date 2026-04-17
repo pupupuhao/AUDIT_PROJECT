@@ -6,7 +6,6 @@ import { judgeAuditEngine } from '@/service/audit-engine'
 import {
   buildSubAuditView,
   getBasisList,
-  getTopGapText,
   getTopReasons,
   getTopStatusLabel
 } from '@/utils/audit-display-adapter'
@@ -27,6 +26,9 @@ const form = reactive({
   agree_hou: undefined,
   sum_area: undefined,
   agree_area: undefined,
+  request_startdate: '',
+  request_enddate: '',
+  reg_date: '',
   startup_date: '',
   orgn_amt: undefined,
   contract_amt: undefined
@@ -68,7 +70,10 @@ const optionalFieldGroups = [
       { key: 'count_hou', label: '总户数', type: 'number' },
       { key: 'agree_hou', label: '同意户数', type: 'number' },
       { key: 'sum_area', label: '总面积', type: 'number' },
-      { key: 'agree_area', label: '同意面积', type: 'number' }
+      { key: 'agree_area', label: '同意面积', type: 'number' },
+      { key: 'request_enddate', label: '征询结束日期 YYYYMMDD', type: 'text' },
+      { key: 'request_startdate', label: '征询开始日期 YYYYMMDD', type: 'text' },
+      { key: 'reg_date', label: '录入日期 YYYYMMDD', type: 'text' }
     ]
   },
   {
@@ -82,7 +87,7 @@ const optionalFieldGroups = [
 ]
 
 const demoCases = [
-  { label: '普通维修：电梯主机', payload: { project_name: '3号楼电梯主机维修', property: 1, is_signed_pc: true, is_signed_esc: true, is_signed_esr: true, need_con: true, has_hou_notion_sum: true, count_hou: 100, agree_hou: 80, sum_area: 1000, agree_area: 800, orgn_amt: 120000, contract_amt: 118000 } },
+  { label: '普通维修：电梯主机', payload: { project_name: '3号楼电梯主机维修', property: 1, is_signed_pc: true, is_signed_esc: true, is_signed_esr: true, need_con: true, has_hou_notion_sum: true, count_hou: 100, agree_hou: 80, sum_area: 1000, agree_area: 800, request_enddate: '20240301', orgn_amt: 120000, contract_amt: 118000 } },
   { label: '紧急维修：外墙脱落', payload: { project_name: '外墙砖脱落应急维修工程', property: 2, is_signed_pc: true, is_signed_esc: true, is_signed_esr: false, need_con: true, orgn_amt: 568770.27, contract_amt: 435000 } },
   {
     label: '专有部分：室内门锁',
@@ -108,7 +113,6 @@ const resultTone = computed(() => {
 })
 
 const summaryStatus = computed(() => getTopStatusLabel(result.value?.overall_result, result.value?.display_result))
-const summaryGapText = computed(() => getTopGapText(result.value?.summary_conclusion || {}))
 const summaryReasons = computed(() => getTopReasons(result.value))
 const summaryBasis = computed(() => getBasisList(result.value?.basis_documents || []))
 const subAuditViews = computed(() =>
@@ -149,7 +153,10 @@ function buildPayload() {
       count_hou: form.count_hou,
       agree_hou: form.agree_hou,
       sum_area: form.sum_area,
-      agree_area: form.agree_area
+      agree_area: form.agree_area,
+      request_enddate: form.request_enddate || undefined,
+      request_startdate: form.request_startdate || undefined,
+      reg_date: form.reg_date || undefined
     }
   }
   return payload
@@ -259,7 +266,6 @@ async function runAudit() {
           <a-descriptions size="small" bordered :column="1">
             <a-descriptions-item label="项目名称">{{ result.project_name }}</a-descriptions-item>
             <a-descriptions-item label="主结论">{{ summaryStatus }}</a-descriptions-item>
-            <a-descriptions-item label="缺口说明">{{ summaryGapText }}</a-descriptions-item>
             <a-descriptions-item label="原因说明">
               <a-space direction="vertical" size="small">
                 <span v-for="item in summaryReasons" :key="item">{{ item }}</span>

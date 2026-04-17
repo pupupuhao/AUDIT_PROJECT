@@ -53,7 +53,6 @@ def build_high_freq_result(
         "type": "high_freq_routed",
         "scope_prelim_pass": False,
         "conflict_detected": False,
-        "gap_categories": [],
         "primary_message": summary_message,
         "display_summary": summary_message,
     }

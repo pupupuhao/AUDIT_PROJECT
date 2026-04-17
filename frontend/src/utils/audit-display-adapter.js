@@ -24,7 +24,7 @@ const REASON_CODE_BRIEF = {
   ENTITY_PUBLIC_REPAIR_OBJECT: '属于共用部位或共用设施设备维修对象',
   ENTITY_PRIVATE_PART_NOT_ELIGIBLE: '属于业主专有部分',
   ENTITY_PROPERTY_SERVICE_SCOPE: '属于物业日常服务或维保范围',
-  ENTITY_IN_WARRANTY: '保修状态需要人工确认',
+  ENTITY_IN_WARRANTY: '保修状态展示提示',
   ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW: '维修对象或范围无法确认',
   ENTITY_FIELD_CONFLICT_MANUAL_REVIEW: '字段与目录语义存在冲突',
   TRACE_MISSING_VOTE_TRACE: '缺少业主表决痕迹',
@@ -35,6 +35,9 @@ const REASON_CODE_BRIEF = {
   PROCESS_NORMAL_VOTE_MISSING: '普通维修缺少表决流程信息',
   PROCESS_NORMAL_VOTE_NOT_LEGAL: '普通维修表决合法性需复核',
   PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '普通维修流程时序需复核',
+  PROCESS_VOTE_DATE_MISSING: '缺少表决日期，无法校验时序',
+  PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED: '已确认先开工后表决',
+  PROCESS_VOTE_DATE_PROXY_USED: '表决日期使用代用日期',
   PROCESS_EMERGENCY_FLOW_EXEMPTED: '紧急维修豁免普通流程',
   PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '紧急维修仍需补充事后资料',
   PROCESS_PROPERTY_VALUE_UNSUPPORTED: '工程性质字段值需人工复核',
@@ -74,14 +77,10 @@ export function getTopStatusLabel(overallResult, displayResult) {
 }
 
 export function getTopReasons(result) {
-  const reasons = dedupeStrings((result?.reasons || []).map((item) => toCustomerReason(item)))
-  if (reasons.length) return reasons.slice(0, 2)
+  const values = result?.top_reasons?.length ? result.top_reasons : result?.reasons
+  const reasons = dedupeStrings((values || []).map((item) => toCustomerReason(item)))
+  if (reasons.length) return reasons.slice(0, 3)
   return ['暂无明确原因说明']
-}
-
-export function getTopGapText(summaryConclusion = {}) {
-  const categories = Array.isArray(summaryConclusion.gap_categories) ? summaryConclusion.gap_categories : []
-  return categories.length ? categories.join(' / ') : '暂无明显缺口'
 }
 
 export function getBasisList(basisDocuments) {

@@ -19,7 +19,6 @@ ENTITY_FIELDS = [
     "is_public_part",
     "is_private_part",
     "is_property_service_scope",
-    "warranty_status",
     "repair_nature",
 ]
 TRACE_FIELDS = [
@@ -38,14 +37,16 @@ PROCESS_FIELDS = [
     "vote_pass_rate_by_household",
     "vote_pass_rate_by_area",
     "vote_legal",
+    "vote_date",
+    "vote_date_is_proxy",
     "construction_start_date",
+    "is_before_vote_construct",
 ]
 AMOUNT_FIELDS = ["budget_amount", "contract_amount"]
 ENTITY_CODES = {
     "ENTITY_PUBLIC_REPAIR_OBJECT",
     "ENTITY_PRIVATE_PART_NOT_ELIGIBLE",
     "ENTITY_PROPERTY_SERVICE_SCOPE",
-    "ENTITY_IN_WARRANTY",
     "ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW",
     "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW",
 }
@@ -59,7 +60,9 @@ TRACE_CODES = {
 PROCESS_CODES = {
     "PROCESS_NORMAL_VOTE_MISSING",
     "PROCESS_NORMAL_VOTE_NOT_LEGAL",
-    "PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW",
+    "PROCESS_VOTE_DATE_MISSING",
+    "PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED",
+    "PROCESS_VOTE_DATE_PROXY_USED",
     "PROCESS_EMERGENCY_FLOW_EXEMPTED",
     "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED",
     "PROCESS_PROPERTY_VALUE_UNSUPPORTED",
@@ -127,7 +130,6 @@ def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict
     public_part = fields.get("is_public_part")
     private_part = fields.get("is_private_part")
     property_scope = fields.get("is_property_service_scope")
-    warranty_status = fields.get("warranty_status")
 
     if public_part is True and (private_part is True or property_scope is True):
         return _result(
@@ -154,15 +156,6 @@ def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict
             ["项目属于物业日常服务或维保范围，不符合维修资金使用条件。"],
             [],
             ["field_mapping_layer", "entity_audit", "property_service_scope"],
-            ENTITY_FIELDS,
-        )
-    if warranty_status == "in_warranty":
-        return _result(
-            "manual_review",
-            ["ENTITY_IN_WARRANTY"],
-            ["当前展示口径下项目可能处于保修期内，需人工确认保修责任后再判断是否可使用维修资金。"],
-            [],
-            ["field_mapping_layer", "entity_audit", "warranty_status"],
             ENTITY_FIELDS,
         )
     if public_part is True:
@@ -274,12 +267,28 @@ def _audit_process(fields: Dict[str, Any], trace_result: Dict[str, Any]) -> Dict
         reasons.append("普通维修表决通过率未达到当前口径或无法确认，建议人工复核。")
         if fields.get("vote_legal") is None:
             missing.extend(["vote_pass_rate_by_household", "vote_pass_rate_by_area"])
-    if fields.get("construction_start_date") and fields.get("vote_legal") is not True:
-        codes.append("PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW")
-        reasons.append("已有开工日期但普通维修表决合法性未确认，需复核流程时序。")
+    if fields.get("construction_start_date") and not fields.get("vote_date"):
+        codes.append("PROCESS_VOTE_DATE_MISSING")
+        reasons.append("缺少表决日期，无法完成普通维修开工与表决先后顺序校验。")
+        missing.append("vote_date")
+    elif fields.get("is_before_vote_construct") is True:
+        codes.append("PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED")
+        reasons.append("普通维修已确认存在先开工后表决的流程时序风险。")
+    if fields.get("vote_date_is_proxy") is True:
+        codes.append("PROCESS_VOTE_DATE_PROXY_USED")
+        reasons.append("当前 vote_date 使用征询日期或录入日期代替，仅用于展示和弱校验。")
 
     if codes:
-        result = "need_supplement" if codes == ["PROCESS_NORMAL_VOTE_MISSING"] else "manual_review"
+        hard_codes = {
+            "PROCESS_NORMAL_VOTE_NOT_LEGAL",
+            "PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED",
+        }
+        if codes == ["PROCESS_VOTE_DATE_PROXY_USED"]:
+            result = "compliant"
+        elif any(code in hard_codes for code in codes):
+            result = "manual_review"
+        else:
+            result = "need_supplement"
         return _result(
             result,
             codes,
@@ -327,6 +336,16 @@ def _audit_amount(fields: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _collect_top_values(sub_audits: Dict[str, Dict[str, Any]], field_name: str) -> List[str]:
+    values: List[str] = []
+    for key in ("process_audit", "entity_audit", "trace_audit"):
+        sub_result = sub_audits.get(key, {})
+        for value in sub_result.get(field_name, []) or []:
+            if value not in values:
+                values.append(value)
+    return values
+
+
 def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     entity = sub_audits["entity_audit"]
     trace = sub_audits["trace_audit"]
@@ -350,23 +369,16 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         overall = "compliant"
         primary = entity
 
-    reason_codes = list(primary.get("reason_codes", []))
-    reasons = list(primary.get("reasons", []))
-    missing_items = list(primary.get("missing_items", []))
+    reason_codes = _collect_top_values(sub_audits, "reason_codes")
+    reasons = _collect_top_values(sub_audits, "reasons")
+    missing_items = _collect_top_values(sub_audits, "missing_items")
     manual_review_required = overall == "manual_review" or any(
         sub.get("result") == "manual_review" for sub in sub_audits.values()
     )
-    gap_categories = []
-    if trace.get("result") == "need_supplement":
-        gap_categories.append("资料/手续痕迹")
-    if process.get("result") in {"need_supplement", "manual_review", "non_compliant"}:
-        gap_categories.append("流程")
     summary_type = overall
     base_message = DISPLAY_MAPPING.get(overall, overall)
     if overall == "compliant":
         display_summary = "项目本体、资料痕迹和流程合规初步通过；金额层仅作展示。"
-    elif gap_categories:
-        display_summary = f"{base_message}（当前主要缺口：{'/'.join(gap_categories)}）"
     else:
         display_summary = reasons[0] if reasons else base_message
     return {
@@ -374,14 +386,15 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         "display_result": DISPLAY_MAPPING[overall],
         "reason_codes": reason_codes,
         "reasons": reasons,
+        "top_reasons": reasons,
         "missing_items": missing_items,
+        "top_missing_items": missing_items,
         "basis_documents": build_from_reason_codes(reason_codes),
         "manual_review_required": manual_review_required,
         "summary_conclusion": {
             "type": summary_type,
             "entity_pass": entity.get("result") == "compliant",
             "conflict_detected": "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW" in entity.get("reason_codes", []),
-            "gap_categories": gap_categories,
             "primary_message": reasons[0] if reasons else base_message,
             "display_summary": display_summary,
         },
