@@ -69,11 +69,11 @@ class PgVectorStore:
         sql = """
         INSERT INTO knowledge_base (
             rule_id, law_name, clause_label, full_title, content, category,
-            keywords, logic_rules, required_fields, embedding
+            keywords, logic_rules, required_fields, embedding, updated_at
         )
         VALUES (
             %(rule_id)s, %(law_name)s, %(clause_label)s, %(full_title)s, %(content)s, %(category)s,
-            %(keywords)s::jsonb, %(logic_rules)s::jsonb, %(required_fields)s::jsonb, %(embedding)s::vector
+            %(keywords)s::jsonb, %(logic_rules)s::jsonb, %(required_fields)s::jsonb, %(embedding)s::vector, CURRENT_TIMESTAMP
         )
         ON CONFLICT (rule_id) DO UPDATE SET
             law_name = EXCLUDED.law_name,
@@ -84,7 +84,8 @@ class PgVectorStore:
             keywords = EXCLUDED.keywords,
             logic_rules = EXCLUDED.logic_rules,
             required_fields = EXCLUDED.required_fields,
-            embedding = EXCLUDED.embedding
+            embedding = EXCLUDED.embedding,
+            updated_at = CURRENT_TIMESTAMP
         """
 
         payload = {
@@ -152,6 +153,7 @@ class PgVectorStore:
         limit: int = 20,
         keyword: str = "",
         category: str = "",
+        law_name: str = "",
     ) -> Dict[str, Any]:
         filters = []
         payload: Dict[str, Any] = {
@@ -177,6 +179,10 @@ class PgVectorStore:
             filters.append("category = %(category)s")
             payload["category"] = category
 
+        if law_name:
+            filters.append("law_name = %(law_name)s")
+            payload["law_name"] = law_name
+
         where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
 
         count_sql = f"""
@@ -200,6 +206,16 @@ class PgVectorStore:
         WHERE category IS NOT NULL AND category != ''
         ORDER BY category ASC
         """
+        law_count_sql = f"""
+        SELECT COUNT(DISTINCT law_name)
+        FROM knowledge_base
+        {where_sql}
+        """
+        latest_updated_sql = f"""
+        SELECT MAX(updated_at)
+        FROM knowledge_base
+        {where_sql}
+        """
 
         with self._connect() as conn:
             with conn.cursor() as cur:
@@ -211,6 +227,12 @@ class PgVectorStore:
 
                 cur.execute(categories_sql)
                 category_rows = cur.fetchall()
+
+                cur.execute(law_count_sql, payload)
+                law_count = cur.fetchone()[0] or 0
+
+                cur.execute(latest_updated_sql, payload)
+                latest_updated_at = cur.fetchone()[0]
 
         items = []
         for row in rows:
@@ -232,6 +254,8 @@ class PgVectorStore:
             "total": total,
             "items": items,
             "categories": [row[0] for row in category_rows],
+            "law_count": law_count,
+            "latest_updated_at": latest_updated_at.isoformat() if latest_updated_at else None,
         }
 
     def get_rule(self, rule_id: str) -> Optional[Dict[str, Any]]:
@@ -263,6 +287,49 @@ class PgVectorStore:
             "logic_rules": row[7] or {},
             "required_docs": row[8] or [],
         }
+
+    def delete_rules_by_prefix(self, prefix: str) -> int:
+        sql = """
+        DELETE FROM knowledge_base
+        WHERE rule_id LIKE %(prefix)s
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"prefix": f"{prefix}%"})
+                deleted = cur.rowcount or 0
+            conn.commit()
+        return deleted
+
+    def count_rules_by_law_names(self, law_names: List[str]) -> Dict[str, int]:
+        names = [name for name in law_names if name]
+        if not names:
+            return {}
+
+        sql = """
+        SELECT law_name, COUNT(*)
+        FROM knowledge_base
+        WHERE law_name = ANY(%(law_names)s)
+        GROUP BY law_name
+        """
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"law_names": names})
+                rows = cur.fetchall()
+
+        return {row[0]: int(row[1]) for row in rows}
+
+    def delete_rule(self, rule_id: str) -> int:
+        sql = """
+        DELETE FROM knowledge_base
+        WHERE rule_id = %(rule_id)s
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"rule_id": rule_id})
+                deleted = cur.rowcount or 0
+            conn.commit()
+        return deleted
 
     def insert_project(self, project_name: str, raw_data: Dict[str, Any]) -> int:
         sql = """

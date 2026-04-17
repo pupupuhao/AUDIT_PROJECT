@@ -10,7 +10,7 @@ from modules.system.models import (
     UserModel,
     UserRoleModel,
 )
-from modules.audit.models import LawClauseModel
+from modules.compliance_center.models import LawClauseModel
 
 
 class DbHelper:
@@ -137,8 +137,24 @@ async def has_roles(uid):
     """
     sql = """select r.id, r.name, ur.status from sys_role as r , sys_user_role as ur where r.id = ur.rid and
              ur.uid = $1 and r.status = 1  and ur.status !=9 order by ur.status desc
-            """
+    """
     return await UserRoleDao.raw_sql(sql, [uid])
+
+
+async def has_active_role(uid):
+    """
+    获取用户当前激活角色。
+    优先返回 status=5 的角色；如果脏数据导致没有激活角色，则回退到排序后的第一条角色记录。
+    """
+    roles = await has_roles(uid)
+    if not roles:
+        return None
+
+    for role in roles:
+        if role["status"] == 5:
+            return role
+
+    return roles[0]
 
 
 async def has_user(username):

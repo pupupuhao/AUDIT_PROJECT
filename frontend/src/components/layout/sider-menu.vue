@@ -10,12 +10,6 @@ const menuClick = (menu) => {
   router.push(menu.path)
 }
 
-const externalMenu = {
-  id: 'external-local-app',
-  name: '前往审核',
-  icon: 'LinkOutlined',
-  path: '/main/audit-engine/judge'
-}
 </script>
 
 <template>
@@ -44,12 +38,6 @@ const externalMenu = {
           </a-sub-menu>
         </template>
       </template>
-      <a-menu-item :key="externalMenu.id" @click="menuClick(externalMenu)">
-        <template #icon>
-          <component :is="$loadIconCpn(externalMenu.icon)"></component>
-        </template>
-        <span>{{ externalMenu.name }}</span>
-      </a-menu-item>
     </a-menu>
   </div>
 </template>

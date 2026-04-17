@@ -6,8 +6,29 @@ from app.core.service import Service
 
 
 class UserService(Service):
+    ROLE_PRIORITY = ("super_admin", "system_admin", "auditor", "viewer")
+
     def __init__(self):
         super(UserService, self).__init__(UserDao)
+
+    @staticmethod
+    def _validate_role_assignments(roles):
+        if not roles:
+            return "请至少分配一个角色"
+
+        role_ids = [role.rid for role in roles]
+        if len(role_ids) != len(set(role_ids)):
+            return "同一用户不能重复分配相同角色"
+
+        invalid_status = [role.status for role in roles if role.status not in (1, 5)]
+        if invalid_status:
+            return "角色状态仅支持 1（普通）或 5（激活）"
+
+        active_count = sum(1 for role in roles if role.status == 5)
+        if active_count > 1:
+            return "同一用户最多只能有一个激活角色"
+
+        return None
 
     async def create_item(self, data):
         """创建用户"""
@@ -15,6 +36,9 @@ class UserService(Service):
         if await self.dao.select({"username": data.username}) is not None:
             return dict(code=400, msg="用户名已存在")
         rids = data.roles
+        role_error = self._validate_role_assignments(rids)
+        if role_error:
+            return dict(code=400, msg=role_error)
         del data.roles
         data.password = get_password_hash(data.password)
         # 检查选中的角色是否存在
@@ -44,10 +68,13 @@ class UserService(Service):
             return dict(code=400, msg="用户不存在")
 
         rids = data.roles
+        role_error = self._validate_role_assignments(rids)
+        if role_error:
+            return dict(code=400, msg=role_error)
         del data.roles
         for role in rids:
             if await RoleDao.select({"id": role.rid, "status__not": 9}) is None:
-                return role.rid
+                return dict(code=400, msg=f"角色{role.rid}不存在")
         # 更新用户
         if data.password != "加密之后的密码":
             data.password = get_password_hash(data.password)
@@ -70,6 +97,27 @@ class UserService(Service):
             [dict(role.dict(), uid=pk, status=role.status) for role in rids]
         )
         return dict()
+
+    @staticmethod
+    async def ensure_login_active_role(uid):
+        """登录时根据角色优先级自动激活当前角色。"""
+        roles = await has_roles(uid)
+        if not roles:
+            return None
+
+        priority_map = {
+            role_name: index for index, role_name in enumerate(UserService.ROLE_PRIORITY)
+        }
+        active_role = min(
+            roles,
+            key=lambda role: (priority_map.get(role["name"], len(priority_map)), role["id"]),
+        )
+
+        await UserRoleDao.update(dict(uid=uid, status__not=9), dict(status=1))
+        await UserRoleDao.update(
+            dict(uid=uid, rid=active_role["id"], status__not=9), dict(status=5)
+        )
+        return active_role
 
     @staticmethod
     async def change_current_role(uid, rid):

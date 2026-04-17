@@ -4,7 +4,6 @@ import { message } from 'ant-design-vue'
 
 import router from '@/router'
 import { loadRouter, getPermissions } from '@/utils/loadCpn'
-import { normalizeBusinessMenus } from '@/utils/business-menu'
 import { getMenus, getUserInfo, login, selectRole } from '@/service/user'
 
 export const userStore = defineStore(
@@ -20,6 +19,8 @@ export const userStore = defineStore(
     const isLoading = ref(false)
 
     const isPush = ref(false)
+
+    const getActiveRole = (roles = []) => roles.find((role) => role.status === 5) || roles[0] || null
 
     // getter
     const accessToken = computed(() => 'Bearer ' + token.value)
@@ -41,10 +42,17 @@ export const userStore = defineStore(
       // 2. 获取用户信息
       const info = await getUserInfo(uid)
       userInfo.value = info.data
+      const activeRole = getActiveRole(info.data.roles)
+      if (!activeRole) {
+        userMenus.value = []
+        permissions.value = []
+        router.push('/main')
+        return
+      }
 
       // 3. 获取权限信息
-      const menus = await getMenus(info.data.roles[0].id)
-      userMenus.value = normalizeBusinessMenus(menus.data)
+      const menus = await getMenus(activeRole.id)
+      userMenus.value = menus.data
 
       // 3.1 加载路由权限
       loadRouter(userMenus.value)

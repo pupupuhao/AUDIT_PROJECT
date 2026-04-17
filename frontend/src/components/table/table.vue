@@ -31,6 +31,10 @@ defineProps({
   },
   listTitle: {
     type: String
+  },
+  scrollY: {
+    type: String,
+    default: 'calc(100vh - 420px)'
   }
 })
 
@@ -66,7 +70,7 @@ const expand = tableTree()
       </template>
       <a-table
         :columns="columns"
-        :scroll="{ y: 'calc(100vh - 420px)' }"
+        :scroll="{ y: scrollY }"
         :data-source="dataSource"
         :pagination="pagination"
         :row-key="(record) => record.id"

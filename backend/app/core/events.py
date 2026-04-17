@@ -14,7 +14,7 @@ async def init_orm():
     """初始化orm"""
     await Tortoise.init(
         db_url=_build_tortoise_db_url(),
-        modules={"models": ["modules.system.models", "modules.audit.models"]},
+        modules={"models": ["modules.system.models", "modules.compliance_center.models"]},
     )
     await Tortoise.generate_schemas()
 

@@ -18,7 +18,10 @@ class ReadBase(BaseModel):
     """数据读取的基类"""
 
     id: int
-    status: int = Field(default=1, description="数据状态 1正常默认值 9 删除 5使用中 ")
+    status: int = Field(
+        default=1,
+        description="数据状态：默认 1 正常、9 删除；用户角色关系里 5 表示激活角色",
+    )
     created: datetime
     modified: datetime
 

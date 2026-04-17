@@ -11,7 +11,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from app.core.events import _build_tortoise_db_url
-from modules.audit.models.law_clause import LawClauseModel
+from modules.compliance_center.models.law_clause import LawClauseModel
 
 
 LAW_POLICY_PATH = BASE_DIR / "data" / "raw" / "law_policy.md"
@@ -90,7 +90,7 @@ def parse_markdown(markdown: str) -> list[dict]:
 async def run():
     await Tortoise.init(
         db_url=_build_tortoise_db_url(),
-        modules={"models": ["modules.system.models", "modules.audit.models"]},
+        modules={"models": ["modules.system.models", "modules.compliance_center.models"]},
     )
     await Tortoise.generate_schemas()
 

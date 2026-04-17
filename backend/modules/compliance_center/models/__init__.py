@@ -1,0 +1,1 @@
+from modules.compliance_center.models.law_clause import LawClauseModel

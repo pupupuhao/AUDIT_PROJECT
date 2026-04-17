@@ -148,13 +148,22 @@ defineExpose({ openModal, showModal })
           ></a-select>
         </a-form-item>
         <a-form-item name="component" label="组件">
-          <a-input v-model:value="menuForm.component" placeholder="views/main" />
+          <a-input
+            v-model:value="menuForm.component"
+            placeholder="例如：rule-center/rule/rule 或 audit-engine/judge/judge"
+          />
         </a-form-item>
         <a-form-item name="identifier" label="权限">
-          <a-input v-model:value="menuForm.identifier" />
+          <a-input
+            v-model:value="menuForm.identifier"
+            placeholder="例如：compliance:law:view 或 compliance:rule:view；审核引擎可用 audit-engine:judge:view"
+          />
         </a-form-item>
         <a-form-item name="api" label="接口">
-          <a-input v-model:value="menuForm.api" />
+          <a-input
+            v-model:value="menuForm.api"
+            placeholder="例如：/api/compliance/laws 或 /api/compliance/rules；审核引擎使用 /api/audit-engine/judge"
+          />
         </a-form-item>
         <a-form-item name="method" label="方法">
           <a-select

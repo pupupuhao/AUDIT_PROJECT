@@ -1,6 +1,7 @@
 from fastapi.encoders import jsonable_encoder
+from typing import Optional
 
-from app.core.dbhelper import MenuDao, RoleDao, RoleMenuDao, has_permissions
+from app.core.dbhelper import MenuDao, RoleDao, RoleMenuDao, UserRoleDao, has_permissions
 from app.core.service import Service
 from app.core.utils import list_to_tree
 
@@ -8,6 +9,13 @@ from app.core.utils import list_to_tree
 class RoleService(Service):
     def __init__(self):
         super(RoleService, self).__init__(RoleDao)
+
+    @staticmethod
+    async def _role_name_exists(name: str, exclude_id: Optional[int] = None) -> bool:
+        filters = {"name": name, "status__not": 9}
+        if exclude_id is not None:
+            filters["id__not"] = exclude_id
+        return await RoleDao.select(filters) is not None
 
     @staticmethod
     async def _load_role_users(role_id: int) -> list[str]:
@@ -53,6 +61,9 @@ class RoleService(Service):
         :param role: pydantic model
         :return:
         """
+        if await self._role_name_exists(role.name):
+            return dict(code=400, msg="角色名称已存在")
+
         if not all(
             [await MenuDao.select({"id": mid, "status__not": 9}) for mid in role.menus]
         ):
@@ -70,10 +81,12 @@ class RoleService(Service):
         :param data:
         :return:
         """
-        if await RoleDao.select({"id": pk}) is None:
+        if await RoleDao.select({"id": pk, "status__not": 9}) is None:
             return dict(code=400, msg="角色不存在")
+        if await self._role_name_exists(data.name, exclude_id=pk):
+            return dict(code=400, msg="角色名称已存在")
         # 如果不为ture -> 有菜单id不存在
-        if not all([await MenuDao.select({"id": mid}) for mid in data.menus]):
+        if not all([await MenuDao.select({"id": mid, "status__not": 9}) for mid in data.menus]):
             return dict(code=400, msg="菜单不存在")
 
         await RoleDao.update(dict(id=pk), dict(name=data.name, remark=data.remark))
@@ -81,6 +94,19 @@ class RoleService(Service):
 
         await RoleMenuDao.inserts([dict(rid=pk, mid=mid) for mid in data.menus])
 
+        return dict()
+
+    async def delete_item(self, pk):
+        """
+        逻辑删除角色，并同步清理角色菜单、用户角色关联，避免残留脏数据。
+        """
+        filters = {"id": pk}
+        filters.update(Service.filter_del)
+        if await self.dao.update(filters, {"status": 9}) == 0:
+            return dict(code=400, msg="数据不存在")
+
+        await RoleMenuDao.update(dict(rid=pk, status__not=9), dict(status=9))
+        await UserRoleDao.update(dict(rid=pk, status__not=9), dict(status=9))
         return dict()
 
     @staticmethod

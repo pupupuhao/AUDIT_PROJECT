@@ -10,7 +10,7 @@ const store = userStore()
 // 响应式数据
 const formRef = ref()
 const formData = reactive({
-  username: 'admin',
+  username: 'super_admin',
   password: '123456'
 })
 // 计算属性 登录按钮是否可以点击

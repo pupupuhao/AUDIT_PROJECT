@@ -2,7 +2,7 @@ import request from '@/utils/request'
 
 export function getLawDocs(params) {
   return request({
-    url: '/audit/laws',
+    url: '/compliance/laws',
     params: {
       offset: params?.offset || 1,
       limit: params?.limit || 10,
@@ -13,7 +13,7 @@ export function getLawDocs(params) {
 
 export function queryLawClauses(data) {
   return request({
-    url: '/audit/law-clauses/query',
+    url: '/compliance/law-clauses/query',
     method: 'post',
     data: {
       offset: data?.offset || 1,
@@ -27,7 +27,7 @@ export function queryLawClauses(data) {
 
 export function addLawClause(data) {
   return request({
-    url: '/audit/law-clauses',
+    url: '/compliance/law-clauses',
     method: 'post',
     data
   })
@@ -35,7 +35,7 @@ export function addLawClause(data) {
 
 export function putLawClause(id, data) {
   return request({
-    url: `/audit/law-clauses/${id}`,
+    url: `/compliance/law-clauses/${id}`,
     method: 'put',
     data
   })
@@ -43,7 +43,7 @@ export function putLawClause(id, data) {
 
 export function delLawClause(id) {
   return request({
-    url: `/audit/law-clauses/${id}`,
+    url: `/compliance/law-clauses/${id}`,
     method: 'delete'
   })
 }

@@ -16,52 +16,28 @@ function loadIconCpn(iconName) {
 // 拿到views下所有.vue文件
 const modules = import.meta.glob('../views/**/**.vue')
 
-function normalizePath(value) {
-  if (!value) return ''
-  return value.startsWith('/') ? value : `/${value}`
-}
-
 function withVueExt(value) {
   return value.endsWith('.vue') ? value : `${value}.vue`
 }
 
+function resolveComponentPath(component) {
+  const normalized = String(component || '').replace(/^\/+/, '')
+  if (!normalized) return ''
+
+  const [namespace] = normalized.split('/')
+  const namespacedDirs = new Set(['system', 'audit-engine', 'rule-center', 'dashboard', 'test'])
+  const relativePath = namespacedDirs.has(namespace) ? normalized : `system/${normalized}`
+  return `../views/main/${withVueExt(relativePath)}`
+}
+
 function resolveComponent(menu) {
-  const candidates = []
-  const component = normalizePath(menu.component || '')
-  const routePath = normalizePath(menu.path || '')
-
-  if (component) {
-    const componentWithExt = withVueExt(component)
-    candidates.push(`../views/main${componentWithExt}`)
-
-    // 兼容数据库里写成 "user/user" 这类旧格式
-    if (
-      !component.startsWith('/system/') &&
-      !component.startsWith('/audit/') &&
-      !component.startsWith('/business/') &&
-      !component.startsWith('/dashboard/') &&
-      !component.startsWith('/test/')
-    ) {
-      candidates.push(`../views/main/system${componentWithExt}`)
-    }
+  const path = resolveComponentPath(menu.component)
+  if (!path) {
+    return modules['../views/error/404.vue']
   }
 
-  // 兼容只配了 path，没有正确 component 的情况
-  if (routePath.startsWith('/main/')) {
-    const routeWithExt = withVueExt(routePath)
-    candidates.push(`../views${routeWithExt}`)
-
-    const segments = routePath.split('/').filter(Boolean)
-    const last = segments[segments.length - 1]
-    if (last) {
-      candidates.push(`../views${routePath}/${last}.vue`)
-    }
-  }
-
-  for (const path of candidates) {
-    if (modules[path]) {
-      return modules[path]
-    }
+  if (modules[path]) {
+    return modules[path]
   }
 
   return modules['../views/error/404.vue']
@@ -90,7 +66,7 @@ function getPermissions(menuArr) {
 
   function _forMenu(menus) {
     for (const menu of menus) {
-      if (menu.type === 1 && firstMenu === null) {
+      if (menu.type === 1 && !menu.hidden && firstMenu === null) {
         firstMenu = menu
       }
       if (menu.type !== 2 && menu.children) {

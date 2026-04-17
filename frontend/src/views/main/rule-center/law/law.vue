@@ -305,7 +305,9 @@ onMounted(fetchData)
           allow-clear
           @search="searchLaw"
         />
-        <a-button type="primary" @click="openCreateDocumentModal">新增法律文件</a-button>
+        <a-button type="primary" v-per="'law:create'" @click="openCreateDocumentModal">
+          新增法律文件
+        </a-button>
       </div>
     </div>
 
@@ -329,7 +331,9 @@ onMounted(fetchData)
             <template v-if="column.key === 'action'">
               <a-space>
                 <a @click="selectLaw(record)">查看详情</a>
-                <a class="danger-link" @click="confirmDeleteLawDocument(record)">删除法规</a>
+                <a v-per="'law:delete'" class="danger-link" @click="confirmDeleteLawDocument(record)">
+                  删除法规
+                </a>
               </a-space>
             </template>
           </template>
@@ -347,7 +351,13 @@ onMounted(fetchData)
             </div>
             <a-space>
               <a-tag color="blue">法规文件</a-tag>
-              <a-button size="small" type="primary" ghost @click="openCreateClauseModal">
+              <a-button
+                size="small"
+                type="primary"
+                ghost
+                v-per="'law:create'"
+                @click="openCreateClauseModal"
+              >
                 新增条款
               </a-button>
             </a-space>
@@ -370,8 +380,10 @@ onMounted(fetchData)
                     <h4 class="section-title">{{ section.full_title || section.clause_label }}</h4>
                   </div>
                   <a-space>
-                    <a @click="openEditModal(section)">编辑</a>
-                    <a class="danger-link" @click="confirmDeleteClause(section)">删除</a>
+                    <a v-per="'law:update'" @click="openEditModal(section)">编辑</a>
+                    <a v-per="'law:delete'" class="danger-link" @click="confirmDeleteClause(section)">
+                      删除
+                    </a>
                   </a-space>
                 </div>
                 <div class="section-text">{{ section.content }}</div>

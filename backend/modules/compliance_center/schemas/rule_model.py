@@ -27,6 +27,26 @@ class RuleModel(BaseModel):
     category: str = "使用范围合规审计"
 
 
+class RuleWrite(LogicRule):
+    pass
+
+
+class RuleUpsert(BaseModel):
+    id: str
+    law_name: str = ""
+    clause_label: str = ""
+    full_title: str = ""
+    content: str = ""
+    keywords: List[str] = Field(default_factory=list)
+    category: str = "使用范围合规审计"
+    logic_rules: LogicRule = Field(default_factory=LogicRule)
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(..., description="检索文本")
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
 class RetrievalResult(BaseModel):
     rule: RuleModel
     score: float

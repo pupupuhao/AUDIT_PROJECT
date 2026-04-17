@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
     keywords JSONB DEFAULT '[]'::jsonb,
     logic_rules JSONB DEFAULT '{}'::jsonb,
     required_fields JSONB DEFAULT '[]'::jsonb,
-    embedding VECTOR(768)
+    embedding VECTOR(768),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS project_data (

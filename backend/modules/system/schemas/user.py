@@ -34,7 +34,7 @@ class UserHasRole(BaseModel):
 
     id: int
     name: str
-    status: int = Field(default=1, description="激活角色 5 正常 1 删除 9")
+    status: int = Field(default=1, description="角色关联状态：1 普通，5 当前激活，9 删除")
 
 
 class UserInfo(UserRead):
@@ -45,7 +45,7 @@ class UserInfo(UserRead):
 
 class RoleActive(BaseModel):
     rid: int = Field(description="角色id")
-    status: int = Field(default=1, description="激活角色 5 正常 1 删除 9")
+    status: int = Field(default=1, description="角色关联状态：1 普通，5 当前激活")
 
 
 class UserAdd(UserIn):

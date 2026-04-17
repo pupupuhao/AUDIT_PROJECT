@@ -61,6 +61,7 @@ const { title, type } = toRefs(modalConf)
     <Table
       :columns="columns"
       :data-source="dataSource"
+      scroll-y="calc(100vh - 280px)"
       page-name="menu"
       list-title="菜单列表"
       @create-click="addClick"

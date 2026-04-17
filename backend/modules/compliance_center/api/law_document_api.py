@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import check_permissions
-from modules.audit.schemas import law_document as LawDocumentSchema
-from modules.audit.services.law_document import service as LawDocumentService
+from modules.compliance_center.schemas import law_document as LawDocumentSchema
+from modules.compliance_center.services.law_document import service as LawDocumentService
 from modules.system.schemas import common as BaseSchema
 
 

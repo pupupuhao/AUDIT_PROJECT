@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from app.core.dbhelper import has_permissions, has_roles, has_user
+from app.core.dbhelper import has_active_role, has_permissions, has_roles, has_user
 from app.core.exceptions import PermissionsError, TokenAuthFailure
 
 # JWT
@@ -64,13 +64,12 @@ async def check_token(security: HTTPAuthorizationCredentials = Depends(bearer)):
 
 async def check_permissions(request: Request, user=Depends(check_token)):
     """检查接口权限"""
-    # 查询当前激活角色
     roles = await has_roles(user.id)
-    active_rid = roles[0]["id"]
-    active_role_name = roles[0]["name"]
+    active_role = await has_active_role(user.id)
+    if active_role is None:
+        raise PermissionsError(403, detail="当前用户未分配可用角色")
 
-    if active_role_name == "super_admin":
-        return user
+    active_rid = active_role["id"]
 
     # 白名单 登录用户信息， 登录用户菜单信息
     whitelist = [
@@ -101,5 +100,12 @@ async def check_permissions(request: Request, user=Depends(check_token)):
         } in current_permissions:
             return user
 
-    if {"api": api, "method": request.method} not in current_permissions:
-        raise PermissionsError(403, detail="无权访问")
+    target_permission = {"api": api, "method": request.method}
+    if target_permission not in current_permissions:
+        # 角色/菜单权限可能刚被更新，命中失败时回源数据库重新拉取一次，避免必须重启服务。
+        latest_permissions = await has_permissions(active_rid)
+        setattr(request.app.state, cache_key, latest_permissions)
+        if target_permission not in latest_permissions:
+            raise PermissionsError(403, detail="无权访问")
+
+    return user

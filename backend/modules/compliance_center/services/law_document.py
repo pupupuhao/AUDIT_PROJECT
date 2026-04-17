@@ -1,5 +1,5 @@
-from modules.audit.models.law_clause import LawClauseModel
-from modules.audit.services.rule_service import load_rules
+from modules.compliance_center.models.law_clause import LawClauseModel
+from modules.compliance_center.services.rule_service import count_rules_by_law_names
 
 
 class LawDocumentService:
@@ -33,7 +33,6 @@ class LawDocumentService:
     def _group_documents(self, clauses):
         grouped_docs: list[dict] = []
         current_doc: dict | None = None
-        rule_counter = self._build_rule_counter()
 
         for clause in clauses:
             if current_doc is None or current_doc["title"] != clause.law_name:
@@ -53,18 +52,12 @@ class LawDocumentService:
                 }
             )
 
+        rule_counter = count_rules_by_law_names([doc["title"] for doc in grouped_docs])
         for doc in grouped_docs:
             doc["section_count"] = len(doc["sections"])
             doc["rule_count"] = rule_counter.get(doc["title"], 0)
 
         return grouped_docs
-
-    @staticmethod
-    def _build_rule_counter() -> dict[str, int]:
-        rule_counter: dict[str, int] = {}
-        for rule in load_rules():
-            rule_counter[rule.law_name] = rule_counter.get(rule.law_name, 0) + 1
-        return rule_counter
 
 
 service = LawDocumentService()

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 
 from app.core.middleware import LogRoute
 from app.core.security import check_permissions
-from modules.audit.schemas import law_clause as LawClauseSchema
-from modules.audit.services.law_clause import service as LawClauseService
+from modules.compliance_center.schemas import law_clause as LawClauseSchema
+from modules.compliance_center.services.law_clause import service as LawClauseService
 from modules.system.schemas import common as BaseSchema
 from modules.system.schemas.common import QueryData
 

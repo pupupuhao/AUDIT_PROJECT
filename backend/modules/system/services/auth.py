@@ -5,6 +5,7 @@ from websockets.exceptions import WebSocketException
 from app.core.dbhelper import has_user
 from app.core.security import generate_token, verify_password
 from app.core.utils import get_system_info
+from modules.system.services.user import service as UserService
 
 
 async def user_login(data):
@@ -12,6 +13,7 @@ async def user_login(data):
     user_obj = await has_user(data.username)
     if user_obj:
         if verify_password(data.password, user_obj.password):
+            await UserService.ensure_login_active_role(user_obj.id)
             return dict(data=dict(id=user_obj.id, token=generate_token(data.username)))
     return dict(code=400, msg="账号或密码错误")
 
