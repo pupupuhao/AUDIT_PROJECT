@@ -1,43 +1,46 @@
 const TOP_STATUS_LABELS = {
   compliant: '通过',
   need_supplement: '需补充',
-  manual_review: '存在风险',
-  non_compliant: '存在风险'
+  manual_review: '需复核',
+  non_compliant: '不符合'
 }
 
 const SUB_STATUS_LABELS = {
   compliant: '通过',
   need_supplement: '需补充',
-  manual_review: '存在风险',
-  non_compliant: '存在风险'
+  manual_review: '需复核',
+  non_compliant: '不符合',
+  info_only: '仅展示'
 }
 
 const SUB_DEFAULT_BRIEF = {
-  scope_audit: '当前场景的使用范围需进一步确认',
-  process_audit: '流程材料暂不完整，建议补充后复核',
-  document_completeness_audit: '资料链暂不完整，建议补充关键材料',
-  timeline_audit: '时序信息暂不完整，建议补充关键时间节点',
-  amount_audit: '金额信息暂不完整，建议补充预算与审批依据',
-  emergency_audit: '应急信息暂不完整，建议补充应急证明材料'
+  entity_audit: '项目本体合规范围需进一步确认',
+  trace_audit: '资料/手续痕迹暂不完整，建议补充后复核',
+  process_audit: '流程合规信息暂不完整，建议补充后复核',
+  amount_info: '金额与造价信息仅用于展示，不影响审计结论'
 }
 
 const REASON_CODE_BRIEF = {
-  MISSING_VOTE: '缺少业主表决相关材料',
-  MISSING_CONTRACT: '缺少施工合同相关材料',
-  MISSING_INVOICE: '缺少发票相关材料',
-  MISSING_ANNOUNCEMENT: '缺少公示相关材料',
-  MISSING_BUDGET_REVIEW: '缺少审价相关材料',
-  MISSING_PAYMENT_PROOF: '缺少付款凭证相关材料',
-  MISSING_SETTLEMENT_REPORT: '缺少结算相关材料',
-  MISSING_COMPLETION_REPORT: '缺少完工或验收相关材料'
+  ENTITY_PUBLIC_REPAIR_OBJECT: '属于共用部位或共用设施设备维修对象',
+  ENTITY_PRIVATE_PART_NOT_ELIGIBLE: '属于业主专有部分',
+  ENTITY_PROPERTY_SERVICE_SCOPE: '属于物业日常服务或维保范围',
+  ENTITY_IN_WARRANTY: '保修状态需要人工确认',
+  ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW: '维修对象或范围无法确认',
+  ENTITY_FIELD_CONFLICT_MANUAL_REVIEW: '字段与目录语义存在冲突',
+  TRACE_MISSING_VOTE_TRACE: '缺少业主表决痕迹',
+  TRACE_MISSING_CONSTRUCTION_CONTRACT: '缺少施工合同痕迹',
+  TRACE_MISSING_APPRAISAL_CONTRACT: '缺少审价合同痕迹',
+  TRACE_MISSING_APPRAISAL_REPORT: '缺少审价报告痕迹',
+  TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED: '需要施工合同但未见签署痕迹',
+  PROCESS_NORMAL_VOTE_MISSING: '普通维修缺少表决流程信息',
+  PROCESS_NORMAL_VOTE_NOT_LEGAL: '普通维修表决合法性需复核',
+  PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '普通维修流程时序需复核',
+  PROCESS_EMERGENCY_FLOW_EXEMPTED: '紧急维修豁免普通流程',
+  PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '紧急维修仍需补充事后资料',
+  AMOUNT_BUDGET_DISPLAY: '预算金额展示',
+  AMOUNT_CONTRACT_DISPLAY: '合同金额展示',
+  AMOUNT_INFO_MISSING: '金额信息缺失'
 }
-
-const PHRASE_REPLACEMENTS = [
-  ['正向维修对象', '属于维修对象目录范围'],
-  ['需继续走完整审计链', '建议补充关键材料后继续审核'],
-  ['目录语义显示项目属于共用设施设备维修范围', '属于维修对象目录范围（共用设施）'],
-  ['目录语义显示项目属于共用部位维修范围', '属于维修对象目录范围（共用部位）']
-]
 
 function dedupeStrings(values) {
   const seen = new Set()
@@ -62,12 +65,7 @@ function isFormalBasisSourceType(sourceType) {
 }
 
 export function toCustomerReason(text) {
-  let normalized = String(text || '').trim()
-  if (!normalized) return ''
-  for (const [from, to] of PHRASE_REPLACEMENTS) {
-    normalized = normalized.replaceAll(from, to)
-  }
-  return normalized
+  return String(text || '').trim()
 }
 
 export function getTopStatusLabel(overallResult, displayResult) {
@@ -91,17 +89,13 @@ export function getBasisList(basisDocuments) {
     .map((item) => item?.display_name || item?.title)
     .filter(Boolean)
   const deduped = dedupeStrings(values)
-  return deduped.length ? deduped : ['系统审计规则（基于工程审计经验）']
-}
-
-export function isHighFreqDirectReject(auditPath) {
-  const list = Array.isArray(auditPath) ? auditPath.map((item) => String(item || '').toLowerCase()) : []
-  return list.includes('direct_reject')
+  return deduped.length ? deduped : ['系统审计规则（基于四层审计结构）']
 }
 
 function getSubTone(item) {
   if (!item || item.applicable === false) return 'na'
   if (item.result === 'compliant') return 'success'
+  if (item.result === 'info_only') return 'info'
   if (item.result === 'need_supplement') return 'warning'
   return 'risk'
 }
@@ -115,19 +109,12 @@ function getSubBrief(key, item) {
   if (!item || item.applicable === false) {
     return '当前场景暂不适用'
   }
-
-  if (key === 'scope_audit' && item.result === 'compliant') {
-    return '属于维修对象目录范围（初步判断）'
-  }
-
   const codes = Array.isArray(item.reason_codes) ? item.reason_codes : []
   for (const code of codes) {
     if (REASON_CODE_BRIEF[code]) return REASON_CODE_BRIEF[code]
   }
-
   const firstReason = toCustomerReason((item.reasons || [])[0] || '')
   if (firstReason) return firstReason
-
   return SUB_DEFAULT_BRIEF[key] || '建议补充相关信息后复核'
 }
 

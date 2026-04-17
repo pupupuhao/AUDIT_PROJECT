@@ -2,6 +2,234 @@
   "version": "v1",
   "updated_at": "2026-04-13",
   "entries": {
+    "ENTITY_PUBLIC_REPAIR_OBJECT": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》第十八条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第十八条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "ENTITY_PRIVATE_PART_NOT_ELIGIBLE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》第十八条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第十八条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "ENTITY_PROPERTY_SERVICE_SCOPE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》第二十五条",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二十五条",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "ENTITY_IN_WARRANTY": [
+      {
+        "display_name": "保修责任优先口径（当前数据展示）",
+        "source_type": "business_rule",
+        "title": "维修资金项目字段映射规则",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "expirer_remark 映射 warranty_status",
+        "primary": true
+      }
+    ],
+    "ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW": [
+      {
+        "display_name": "维修对象目录映射规则",
+        "source_type": "system_rule",
+        "title": "repairable_object_catalog.json",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW": [
+      {
+        "display_name": "标准字段冲突复核规则",
+        "source_type": "system_rule",
+        "title": "四层审计字段映射规则",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "TRACE_MISSING_VOTE_TRACE": [
+      {
+        "display_name": "表决痕迹补充提示",
+        "source_type": "business_rule",
+        "title": "资料/手续痕迹完备性审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "TRACE_MISSING_CONSTRUCTION_CONTRACT": [
+      {
+        "display_name": "施工合同痕迹补充提示",
+        "source_type": "business_rule",
+        "title": "资料/手续痕迹完备性审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "TRACE_MISSING_APPRAISAL_CONTRACT": [
+      {
+        "display_name": "审价合同痕迹补充提示",
+        "source_type": "business_rule",
+        "title": "资料/手续痕迹完备性审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "TRACE_MISSING_APPRAISAL_REPORT": [
+      {
+        "display_name": "审价报告痕迹补充提示",
+        "source_type": "business_rule",
+        "title": "资料/手续痕迹完备性审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED": [
+      {
+        "display_name": "施工合同签署痕迹补充提示",
+        "source_type": "business_rule",
+        "title": "资料/手续痕迹完备性审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "PROCESS_NORMAL_VOTE_MISSING": [
+      {
+        "display_name": "普通维修表决流程复核规则",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "PROCESS_NORMAL_VOTE_NOT_LEGAL": [
+      {
+        "display_name": "普通维修表决通过率复核规则",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW": [
+      {
+        "display_name": "普通维修流程时序复核规则",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "PROCESS_EMERGENCY_FLOW_EXEMPTED": [
+      {
+        "display_name": "紧急维修流程豁免提示",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "紧急维修不豁免本体合规",
+        "primary": true
+      }
+    ],
+    "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED": [
+      {
+        "display_name": "紧急维修事后资料复核提示",
+        "source_type": "business_rule",
+        "title": "流程合规审计",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "AMOUNT_BUDGET_DISPLAY": [
+      {
+        "display_name": "预算金额展示项",
+        "source_type": "display_rule",
+        "title": "金额与造价信息展示",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "AMOUNT_CONTRACT_DISPLAY": [
+      {
+        "display_name": "合同金额展示项",
+        "source_type": "display_rule",
+        "title": "金额与造价信息展示",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
+    "AMOUNT_INFO_MISSING": [
+      {
+        "display_name": "金额信息缺失展示项",
+        "source_type": "display_rule",
+        "title": "金额与造价信息展示",
+        "issuer": "",
+        "document_no": "",
+        "article": "",
+        "section": "",
+        "primary": true
+      }
+    ],
     "IN_SCOPE_COMMON_PART": [
       {
         "display_name": "《住宅物业管理服务规范》（DB31/T 360—2020）第3.8",

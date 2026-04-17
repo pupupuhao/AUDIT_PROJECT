@@ -10,14 +10,7 @@ DISPLAY_MAPPING = {
     "manual_review": "建议人工复核",
 }
 
-SUB_AUDIT_KEYS = (
-    "scope_audit",
-    "process_audit",
-    "document_completeness_audit",
-    "timeline_audit",
-    "amount_audit",
-    "emergency_audit",
-)
+SUB_AUDIT_KEYS = ("entity_audit", "trace_audit", "process_audit", "amount_info")
 
 
 def _empty_sub_audit() -> Dict[str, Any]:
@@ -30,7 +23,7 @@ def _empty_sub_audit() -> Dict[str, Any]:
         "missing_items": [],
         "basis_documents": [],
         "audit_path": [],
-        "facts_used": [],
+        "used_standard_fields": [],
     }
 
 
