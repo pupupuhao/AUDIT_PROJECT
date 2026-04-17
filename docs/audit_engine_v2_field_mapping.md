@@ -51,11 +51,13 @@
 | 子审计 | 当前使用标准字段 |
 |---|---|
 | `entity_audit` | `project_name`, `is_public_part`, `is_private_part`, `is_property_service_scope`, `repair_nature` |
-| `trace_audit` | `has_vote_trace`, `need_construction_contract`, `has_construction_contract`, `has_appraisal_contract`, `has_appraisal_report` |
+| `trace_audit` | `repair_nature`, `is_emergency_repair`, `has_vote_trace`, `need_construction_contract`, `has_construction_contract`, `has_appraisal_contract`, `has_appraisal_report` |
 | `process_audit` | `property_raw_value`, `property_value_valid`, `repair_nature`, `is_emergency_repair`, `has_vote_trace`, `vote_pass_rate_by_household`, `vote_pass_rate_by_area`, `vote_legal`, `vote_date`, `vote_date_is_proxy`, `construction_start_date`, `is_before_vote_construct` |
 | `amount_info` | `budget_amount`, `contract_amount` |
 
 当前 `trace_audit` 只覆盖表决痕迹、施工合同、审价合同、审价报告。`has_publicity_trace`、`has_budget_trace`、`has_acceptance_trace` 暂未正式实现。
+
+普通维修 trace 默认检查表决痕迹、施工合同、审价合同、审价报告。紧急维修 trace 不默认要求业主表决痕迹，不触发 `TRACE_MISSING_VOTE_TRACE`；紧急维修 trace 仅围绕施工合同、审价/结算、事后资料痕迹进行补充核验。
 
 当前 `warranty_status` 是展示口径，不会让 `entity_audit` 或顶层主结论自动变成 `manual_review`。
 
@@ -71,7 +73,14 @@
 
 ## 顶层结果聚合
 
-`overall_result` 仍按风险优先级决定，但顶层 `reasons/top_reasons` 和 `missing_items/top_missing_items` 从 `entity_audit`、`process_audit`、`trace_audit` 合并去重。`amount_info` 只展示金额，不进入顶层主原因。
+`overall_result` 仍按风险优先级决定，但顶层 `reasons/top_reasons` 和 `missing_items/top_missing_items` 会按主结论优先级合并去重。`entity_audit = non_compliant` 时，本体不合规原因排在首位，不会被 trace/process 的补充材料提示覆盖。
+
+顶层参考依据为汇总型：
+
+- `top_basis_documents`：触发主结论的直接分项依据。
+- `all_basis_documents`：`entity_audit -> trace_audit -> process_audit` 的全部法规依据汇总，按法规标题、文号、条文去重。
+- `basis_documents`：为兼容前端，等同于 `all_basis_documents`。
+- `amount_info` 不进入顶层依据汇总。
 
 前端 summary 区只保留：项目名称、主结论、原因说明、参考依据；不再展示“缺口说明”。
 
@@ -120,9 +129,12 @@ map_excel_row_to_audit_request(row: Dict[str, Any]) -> Dict[str, Any]
 | 分项 | 场景 | 默认依据 | 强度 |
 |---|---|---|---|
 | `trace_audit` | 资料/手续痕迹字段齐备 | 《住宅专项维修资金管理办法》第二十二条、第二十三条 | weak |
+| `trace_audit` | 紧急维修资料/手续痕迹字段齐备 | 《住宅专项维修资金管理办法》第二十四条；沪房管物〔2011〕326号第二条至第四条 | strong |
 | `process_audit` | 普通维修流程字段初步通过 | 《住宅专项维修资金管理办法》第二十二条、第二十三条 | weak |
 | `process_audit` | 紧急维修流程通过态 | 《住宅专项维修资金管理办法》第二十四条 | strong |
 
 使用背景性法规表达的 code 包括：`ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW`、`ENTITY_FIELD_CONFLICT_MANUAL_REVIEW`、全部 trace 类 code、`PROCESS_NORMAL_VOTE_MISSING`、`PROCESS_VOTE_DATE_MISSING`、`PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED`、`PROCESS_VOTE_DATE_PROXY_USED`、`PROCESS_PROPERTY_VALUE_UNSUPPORTED`、`PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED`。这些 code 不写“违反第XX条”或“不符合第XX条规定”，只表达“依据/根据程序要求，当前未发现或无法确认，建议补充核验”。
 
-前端参考依据展示规则：除 `amount_info` 外，只要后端返回 `basis_documents`，页面按 `display_name` 原样展示，不再过滤 `source_type`，也不再回退为“系统审计规则”或“暂无明确法规展示”。`amount_info` 固定展示“金额层仅展示，不绑定法规依据”。
+前端参考依据展示规则：顶层 summary 仅展示 `display_name` 法规条文列表，不展示 `basis_explanation`，默认展示前 3 条，超过后可展开。分项卡片按 `display_name + basis_explanation` 成对展示，每个分项默认展示前 2 组，超过后可展开；不再把所有法条和所有说明分开堆叠。`amount_info` 固定展示“金额层仅展示，不绑定法规依据”。页面不再过滤 `source_type`，也不再回退为“系统审计规则”或“暂无明确法规展示”。
+
+前端颜色映射：`compliant=绿色`、`need_supplement=黄色`、`manual_review=橙色`、`non_compliant=红色`、`info_only=蓝色`。

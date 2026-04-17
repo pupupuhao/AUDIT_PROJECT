@@ -14,33 +14,33 @@ const SUB_STATUS_LABELS = {
 }
 
 const SUB_DEFAULT_BRIEF = {
-  entity_audit: '项目本体合规范围需进一步确认',
-  trace_audit: '资料/手续痕迹暂不完整，建议补充后复核',
-  process_audit: '流程合规信息暂不完整，建议补充后复核',
+  entity_audit: '项目使用范围需结合共用部位、专有部分和物业服务范围进行最终判断。',
+  trace_audit: '当前资料/手续痕迹字段齐备，初步满足本轮展示要求。',
+  process_audit: '当前流程字段初步满足本轮展示要求。',
   amount_info: '金额与造价信息仅用于展示，不影响审计结论'
 }
 
 const REASON_CODE_BRIEF = {
-  ENTITY_PUBLIC_REPAIR_OBJECT: '属于共用部位或共用设施设备维修对象',
-  ENTITY_PRIVATE_PART_NOT_ELIGIBLE: '属于业主专有部分',
-  ENTITY_PROPERTY_SERVICE_SCOPE: '属于物业日常服务或维保范围',
+  ENTITY_PUBLIC_REPAIR_OBJECT: '项目属于共用部位或共用设施设备维修对象，符合专项维修资金使用范围。',
+  ENTITY_PRIVATE_PART_NOT_ELIGIBLE: '项目属于业主专有部分，不属于专项维修资金使用范围。',
+  ENTITY_PROPERTY_SERVICE_SCOPE: '项目属于物业日常服务或维保范围，不属于专项维修资金使用范围。',
   ENTITY_IN_WARRANTY: '保修状态展示提示',
-  ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW: '维修对象或范围无法确认',
-  ENTITY_FIELD_CONFLICT_MANUAL_REVIEW: '字段与目录语义存在冲突',
-  TRACE_MISSING_VOTE_TRACE: '缺少业主表决痕迹',
-  TRACE_MISSING_CONSTRUCTION_CONTRACT: '缺少施工合同痕迹',
-  TRACE_MISSING_APPRAISAL_CONTRACT: '缺少审价合同痕迹',
-  TRACE_MISSING_APPRAISAL_REPORT: '缺少审价报告痕迹',
-  TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED: '需要施工合同但未见签署痕迹',
-  PROCESS_NORMAL_VOTE_MISSING: '普通维修缺少表决流程信息',
-  PROCESS_NORMAL_VOTE_NOT_LEGAL: '普通维修表决合法性需复核',
-  PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '普通维修流程时序需复核',
-  PROCESS_VOTE_DATE_MISSING: '缺少表决日期，无法校验时序',
-  PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED: '已确认先开工后表决',
-  PROCESS_VOTE_DATE_PROXY_USED: '表决日期使用代用日期',
-  PROCESS_EMERGENCY_FLOW_EXEMPTED: '紧急维修豁免普通流程',
-  PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '紧急维修仍需补充事后资料',
-  PROCESS_PROPERTY_VALUE_UNSUPPORTED: '工程性质字段值需人工复核',
+  ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW: '项目维修对象或使用范围无法确认，需要补充材料后人工复核。',
+  ENTITY_FIELD_CONFLICT_MANUAL_REVIEW: '项目目录语义与来源字段存在冲突，需要人工复核使用范围。',
+  TRACE_MISSING_VOTE_TRACE: '当前资料/手续痕迹不完整，需补充业主表决材料后再核验。',
+  TRACE_MISSING_CONSTRUCTION_CONTRACT: '当前资料/手续痕迹不完整，需补充施工合同材料后再核验。',
+  TRACE_MISSING_APPRAISAL_CONTRACT: '当前资料/手续痕迹不完整，需补充审价合同材料后再核验。',
+  TRACE_MISSING_APPRAISAL_REPORT: '当前资料/手续痕迹不完整，需补充审价报告材料后再核验。',
+  TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED: '当前资料/手续痕迹不完整，需补充施工合同签署材料后再核验。',
+  PROCESS_NORMAL_VOTE_MISSING: '当前普通维修项目缺少表决流程信息，流程合规性需补充材料后判断。',
+  PROCESS_NORMAL_VOTE_NOT_LEGAL: '当前普通维修项目表决结果未达到展示口径或无法确认，流程合规性需复核。',
+  PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '当前普通维修流程时序需要复核，需补充表决与开工时间材料。',
+  PROCESS_VOTE_DATE_MISSING: '当前普通维修项目缺少表决日期，无法完成流程时序校验。',
+  PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED: '当前普通维修项目存在先开工后表决的时序风险，流程合规性需复核。',
+  PROCESS_VOTE_DATE_PROXY_USED: '当前表决日期使用代用日期，流程时序判断仅作为弱校验展示。',
+  PROCESS_EMERGENCY_FLOW_EXEMPTED: '当前项目按紧急维修程序审查，普通表决流程可豁免；流程判断以事后资料痕迹为主。',
+  PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '当前项目按紧急维修程序处理，普通表决流程可豁免；但事后资料痕迹不足，流程仍需补充。',
+  PROCESS_PROPERTY_VALUE_UNSUPPORTED: '当前工程性质字段超出支持范围，普通维修或紧急维修路径需人工复核。',
   AMOUNT_BUDGET_DISPLAY: '预算金额展示',
   AMOUNT_CONTRACT_DISPLAY: '合同金额展示',
   AMOUNT_INFO_MISSING: '金额信息缺失'
@@ -78,12 +78,43 @@ export function getBasisList(basisDocuments) {
   return dedupeStrings(documents.map((item) => item?.display_name || item?.title).filter(Boolean))
 }
 
+export function getTopBasisView(basisDocuments) {
+  return {
+    documents: getBasisList(basisDocuments || [])
+  }
+}
+
+export function getSubBasisPairs(basisDocuments) {
+  const documents = basisDocuments || []
+  const seen = new Set()
+  const pairs = []
+  for (const item of documents) {
+    const lawText = String(item?.display_name || item?.title || '').trim()
+    if (!lawText) continue
+    const basisExplanation = String(item?.basis_explanation || '当前依据用于本分项判断展示。').trim()
+    const key = `${lawText}__${basisExplanation}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pairs.push({ lawText, basisExplanation })
+  }
+  return pairs
+}
+
+export function getBasisView(basisDocuments) {
+  return {
+    documents: getBasisList(basisDocuments || []),
+    pairs: getSubBasisPairs(basisDocuments || [])
+  }
+}
+
 function getSubTone(item) {
   if (!item || item.applicable === false) return 'na'
   if (item.result === 'compliant') return 'success'
   if (item.result === 'info_only') return 'info'
   if (item.result === 'need_supplement') return 'warning'
-  return 'risk'
+  if (item.result === 'manual_review') return 'review'
+  if (item.result === 'non_compliant') return 'error'
+  return 'review'
 }
 
 function getSubStatus(item) {
@@ -105,12 +136,17 @@ function getSubBrief(key, item) {
 }
 
 export function buildSubAuditView(key, title, item) {
+  const basisView =
+    key === 'amount_info'
+      ? { documents: ['金额层仅展示，不绑定法规依据'], pairs: [] }
+      : getBasisView(item?.basis_documents || [])
   return {
     key,
     title,
     tone: getSubTone(item),
     status: getSubStatus(item),
     brief: getSubBrief(key, item),
-    basis: key === 'amount_info' ? ['金额层仅展示，不绑定法规依据'] : getBasisList(item?.basis_documents || [])
+    basis: basisView.documents,
+    basisPairs: basisView.pairs
   }
 }

@@ -20,6 +20,7 @@ class BasisDocument(BaseModel):
     article: Optional[str] = None
     section: Optional[str] = None
     basis_strength: Optional[str] = None
+    basis_explanation: Optional[str] = None
 
 
 class FieldMappingRecord(BaseModel):
@@ -83,6 +84,8 @@ class AuditResponse(BaseModel):
     reasons: List[str] = Field(default_factory=list)
     top_reasons: List[str] = Field(default_factory=list)
     basis_documents: List[BasisDocument] = Field(default_factory=list)
+    top_basis_documents: List[BasisDocument] = Field(default_factory=list)
+    all_basis_documents: List[BasisDocument] = Field(default_factory=list)
     missing_items: List[str] = Field(default_factory=list)
     top_missing_items: List[str] = Field(default_factory=list)
     audit_path: List[str] = Field(default_factory=list)

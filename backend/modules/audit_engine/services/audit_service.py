@@ -22,6 +22,8 @@ ENTITY_FIELDS = [
     "repair_nature",
 ]
 TRACE_FIELDS = [
+    "repair_nature",
+    "is_emergency_repair",
     "has_vote_trace",
     "need_construction_contract",
     "has_construction_contract",
@@ -191,26 +193,43 @@ def _audit_trace(fields: Dict[str, Any]) -> Dict[str, Any]:
     codes: List[str] = []
     reasons: List[str] = []
     missing: List[str] = []
+    is_emergency = fields.get("repair_nature") == "emergency" or fields.get("is_emergency_repair") is True
 
-    if fields.get("has_vote_trace") is not True:
+    if not is_emergency and fields.get("has_vote_trace") is not True:
         codes.append("TRACE_MISSING_VOTE_TRACE")
         reasons.append("缺少业主表决痕迹，需补充表决汇总或相关材料。")
         missing.append("has_vote_trace")
     if fields.get("need_construction_contract") is True and fields.get("has_construction_contract") is not True:
         codes.append("TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED")
-        reasons.append("当前项目需要施工合同，但未见施工合同签署痕迹。")
+        reasons.append(
+            "当前项目需要施工合同，但未见施工合同签署痕迹。"
+            if not is_emergency
+            else "紧急维修仍需补充施工合同或事后确认材料，当前未见施工合同签署痕迹。"
+        )
         missing.append("has_construction_contract")
     elif fields.get("has_construction_contract") is not True:
         codes.append("TRACE_MISSING_CONSTRUCTION_CONTRACT")
-        reasons.append("缺少施工合同签署痕迹，需补充施工合同材料。")
+        reasons.append(
+            "缺少施工合同签署痕迹，需补充施工合同材料。"
+            if not is_emergency
+            else "紧急维修未见施工合同或事后施工资料痕迹，建议补充核验。"
+        )
         missing.append("has_construction_contract")
     if fields.get("has_appraisal_contract") is not True:
         codes.append("TRACE_MISSING_APPRAISAL_CONTRACT")
-        reasons.append("缺少审价合同签署痕迹，需补充审价合同材料。")
+        reasons.append(
+            "缺少审价合同签署痕迹，需补充审价合同材料。"
+            if not is_emergency
+            else "紧急维修未见审价/结算委托痕迹，建议补充事后审价或结算材料。"
+        )
         missing.append("has_appraisal_contract")
     if fields.get("has_appraisal_report") is not True:
         codes.append("TRACE_MISSING_APPRAISAL_REPORT")
-        reasons.append("缺少审价报告痕迹，需补充审价报告材料。")
+        reasons.append(
+            "缺少审价报告痕迹，需补充审价报告材料。"
+            if not is_emergency
+            else "紧急维修未见审价报告或结算审核痕迹，建议补充事后审价/结算资料。"
+        )
         missing.append("has_appraisal_report")
 
     if codes:
@@ -229,7 +248,10 @@ def _audit_trace(fields: Dict[str, Any]) -> Dict[str, Any]:
         [],
         ["field_mapping_layer", "trace_audit", "trace_complete"],
         TRACE_FIELDS,
-        basis_documents_override=build_default_compliant_basis("trace_audit"),
+        basis_documents_override=build_default_compliant_basis(
+            "trace_audit",
+            "emergency" if is_emergency else "normal",
+        ),
     )
 
 
@@ -343,14 +365,63 @@ def _audit_amount(fields: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _collect_top_values(sub_audits: Dict[str, Dict[str, Any]], field_name: str) -> List[str]:
+def _collect_top_values(
+    sub_audits: Dict[str, Dict[str, Any]],
+    field_name: str,
+    ordered_keys: Sequence[str],
+) -> List[str]:
     values: List[str] = []
-    for key in ("process_audit", "entity_audit", "trace_audit"):
+    for key in ordered_keys:
         sub_result = sub_audits.get(key, {})
         for value in sub_result.get(field_name, []) or []:
             if value not in values:
                 values.append(value)
     return values
+
+
+def _basis_dedupe_key(document: Dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(document.get("title") or ""),
+        str(document.get("document_no") or ""),
+        str(document.get("article") or ""),
+    )
+
+
+def _collect_basis_documents(sub_audits: Dict[str, Dict[str, Any]], ordered_keys: Sequence[str]) -> List[Dict[str, Any]]:
+    documents: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for key in ordered_keys:
+        for document in sub_audits.get(key, {}).get("basis_documents", []) or []:
+            dedupe_key = _basis_dedupe_key(document)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            documents.append(document)
+    return documents
+
+
+def _primary_basis_key(entity: Dict[str, Any], trace: Dict[str, Any], process: Dict[str, Any]) -> str:
+    if "PROCESS_PROPERTY_VALUE_UNSUPPORTED" in process.get("reason_codes", []):
+        return "process_audit"
+    if entity.get("result") in {"non_compliant", "manual_review"}:
+        return "entity_audit"
+    if process.get("result") in {"manual_review", "non_compliant"}:
+        return "process_audit"
+    if trace.get("result") == "need_supplement":
+        return "trace_audit"
+    if process.get("result") == "need_supplement":
+        return "process_audit"
+    return "entity_audit"
+
+
+def _reason_order(primary_key: str) -> List[str]:
+    if primary_key == "entity_audit":
+        return ["entity_audit", "trace_audit", "process_audit"]
+    if primary_key == "trace_audit":
+        return ["trace_audit", "process_audit", "entity_audit"]
+    if primary_key == "process_audit":
+        return ["process_audit", "entity_audit", "trace_audit"]
+    return ["entity_audit", "trace_audit", "process_audit"]
 
 
 def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -359,26 +430,29 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     process = sub_audits["process_audit"]
     if "PROCESS_PROPERTY_VALUE_UNSUPPORTED" in process.get("reason_codes", []):
         overall = "manual_review"
-        primary = process
     elif entity["result"] == "non_compliant":
         overall = "non_compliant"
-        primary = entity
     elif entity["result"] == "manual_review":
         overall = "manual_review"
-        primary = entity
+    elif process["result"] in {"manual_review", "non_compliant"}:
+        overall = process["result"]
     elif trace["result"] == "need_supplement":
         overall = "need_supplement"
-        primary = trace
-    elif process["result"] in {"manual_review", "non_compliant", "need_supplement"}:
+    elif process["result"] == "need_supplement":
         overall = process["result"]
-        primary = process
     else:
         overall = "compliant"
-        primary = entity
 
-    reason_codes = _collect_top_values(sub_audits, "reason_codes")
-    reasons = _collect_top_values(sub_audits, "reasons")
-    missing_items = _collect_top_values(sub_audits, "missing_items")
+    primary_key = _primary_basis_key(entity, trace, process)
+    ordered_reason_keys = _reason_order(primary_key)
+    reason_codes = _collect_top_values(sub_audits, "reason_codes", ordered_reason_keys)
+    reasons = _collect_top_values(sub_audits, "reasons", ordered_reason_keys)
+    missing_items = _collect_top_values(sub_audits, "missing_items", ordered_reason_keys)
+    top_basis_documents = _collect_basis_documents(sub_audits, [primary_key])
+    all_basis_documents = _collect_basis_documents(
+        sub_audits,
+        ["entity_audit", "trace_audit", "process_audit"],
+    )
     manual_review_required = overall == "manual_review" or any(
         sub.get("result") == "manual_review" for sub in sub_audits.values()
     )
@@ -396,7 +470,9 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         "top_reasons": reasons,
         "missing_items": missing_items,
         "top_missing_items": missing_items,
-        "basis_documents": build_from_reason_codes(reason_codes),
+        "basis_documents": all_basis_documents,
+        "top_basis_documents": top_basis_documents,
+        "all_basis_documents": all_basis_documents,
         "manual_review_required": manual_review_required,
         "summary_conclusion": {
             "type": summary_type,

@@ -5,13 +5,15 @@ import { message } from 'ant-design-vue'
 import { judgeAuditEngine } from '@/service/audit-engine'
 import {
   buildSubAuditView,
-  getBasisList,
+  getTopBasisView,
   getTopReasons,
   getTopStatusLabel
 } from '@/utils/audit-display-adapter'
 
 const loading = ref(false)
 const result = ref(null)
+const summaryBasisExpanded = ref(false)
+const expandedSubBasisKeys = ref([])
 
 const form = reactive({
   project_name: '',
@@ -97,9 +99,9 @@ const demoCases = [
 ]
 
 const subAuditMeta = [
-  { key: 'entity_audit', title: '项目本体合规' },
-  { key: 'trace_audit', title: '资料/手续痕迹完备性' },
-  { key: 'process_audit', title: '流程合规' },
+  { key: 'entity_audit', title: '专项维修资金使用范围合规性' },
+  { key: 'trace_audit', title: '资料/手续完整性' },
+  { key: 'process_audit', title: '流程合规性' },
   { key: 'amount_info', title: '金额与造价信息展示' }
 ]
 
@@ -109,12 +111,19 @@ const resultTone = computed(() => {
   if (key === 'non_compliant') return 'error'
   if (key === 'manual_review') return 'warning'
   if (key === 'compliant') return 'success'
+  if (key === 'need_supplement') return 'warning'
   return 'processing'
 })
 
 const summaryStatus = computed(() => getTopStatusLabel(result.value?.overall_result, result.value?.display_result))
 const summaryReasons = computed(() => getTopReasons(result.value))
-const summaryBasis = computed(() => getBasisList(result.value?.basis_documents || []))
+const summaryBasisView = computed(() =>
+  getTopBasisView(result.value?.all_basis_documents || result.value?.basis_documents || [])
+)
+const summaryBasisVisible = computed(() =>
+  summaryBasisExpanded.value ? summaryBasisView.value.documents : summaryBasisView.value.documents.slice(0, 3)
+)
+const summaryBasisHasMore = computed(() => summaryBasisView.value.documents.length > 3)
 const subAuditViews = computed(() =>
   subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, result.value?.sub_audits?.[meta.key]))
 )
@@ -176,6 +185,8 @@ function resetForm() {
     form[key] = key === 'project_name' ? '' : undefined
   })
   result.value = null
+  summaryBasisExpanded.value = false
+  expandedSubBasisKeys.value = []
 }
 
 async function runAudit() {
@@ -188,9 +199,28 @@ async function runAudit() {
   try {
     const data = await judgeAuditEngine(buildPayload())
     result.value = data
+    summaryBasisExpanded.value = false
+    expandedSubBasisKeys.value = []
   } finally {
     loading.value = false
   }
+}
+
+function isSubBasisExpanded(key) {
+  return expandedSubBasisKeys.value.includes(key)
+}
+
+function getVisibleBasisPairs(item) {
+  const pairs = item.basisPairs || []
+  return isSubBasisExpanded(item.key) ? pairs : pairs.slice(0, 2)
+}
+
+function toggleSubBasis(key) {
+  if (isSubBasisExpanded(key)) {
+    expandedSubBasisKeys.value = expandedSubBasisKeys.value.filter((item) => item !== key)
+    return
+  }
+  expandedSubBasisKeys.value = [...expandedSubBasisKeys.value, key]
 }
 </script>
 
@@ -273,7 +303,19 @@ async function runAudit() {
             </a-descriptions-item>
             <a-descriptions-item label="参考依据">
               <a-space direction="vertical" size="small">
-                <span v-for="doc in summaryBasis" :key="doc">{{ doc }}</span>
+                <div class="basis-section">
+                  <div class="basis-section-title">法规条文</div>
+                  <span v-for="doc in summaryBasisVisible" :key="doc">{{ doc }}</span>
+                  <a-button
+                    v-if="summaryBasisHasMore"
+                    type="link"
+                    size="small"
+                    class="basis-toggle"
+                    @click="summaryBasisExpanded = !summaryBasisExpanded"
+                  >
+                    {{ summaryBasisExpanded ? '收起' : `展开更多（${summaryBasisView.documents.length - 3}）` }}
+                  </a-button>
+                </div>
               </a-space>
             </a-descriptions-item>
           </a-descriptions>
@@ -298,7 +340,30 @@ async function runAudit() {
                     </a-descriptions-item>
                     <a-descriptions-item label="参考依据">
                       <a-space direction="vertical" size="small">
-                        <span v-for="basis in item.basis.slice(0, 2)" :key="`${item.key}-${basis}`">{{ basis }}</span>
+                        <div
+                          v-for="(pair, index) in getVisibleBasisPairs(item)"
+                          :key="`${item.key}-${pair.lawText}-${index}`"
+                          class="basis-pair"
+                        >
+                          <div class="basis-section">
+                            <div class="basis-section-title">法律条文{{ index + 1 }}</div>
+                            <span>{{ pair.lawText }}</span>
+                          </div>
+                          <div class="basis-section">
+                            <div class="basis-section-title">依据说明</div>
+                            <span>{{ pair.basisExplanation }}</span>
+                          </div>
+                        </div>
+                        <a-button
+                          v-if="(item.basisPairs || []).length > 2"
+                          type="link"
+                          size="small"
+                          class="basis-toggle"
+                          @click="toggleSubBasis(item.key)"
+                        >
+                          {{ isSubBasisExpanded(item.key) ? '收起' : `展开更多（${item.basisPairs.length - 2}）` }}
+                        </a-button>
+                        <span v-if="item.key === 'amount_info' && item.basis.length">{{ item.basis[0] }}</span>
                       </a-space>
                     </a-descriptions-item>
                   </a-descriptions>
@@ -373,15 +438,49 @@ async function runAudit() {
   border-left-color: #faad14;
 }
 
+.sub-audit-card--review {
+  border-left-color: #fa8c16;
+}
+
+.sub-audit-card--error {
+  border-left-color: #ff4d4f;
+}
+
 .sub-audit-card--info {
   border-left-color: #1677ff;
 }
 
-.sub-audit-card--risk {
-  border-left-color: #ff4d4f;
-}
-
 .sub-audit-card--na {
   border-left-color: #8c8c8c;
+}
+
+.basis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.basis-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.basis-pair + .basis-pair {
+  padding-top: 8px;
+  border-top: 1px dashed #f0f0f0;
+}
+
+.basis-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #667085;
+}
+
+.basis-toggle {
+  height: auto;
+  padding: 0;
+  text-align: left;
 }
 </style>

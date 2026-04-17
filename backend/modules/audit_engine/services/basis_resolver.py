@@ -46,6 +46,7 @@ def _normalize_source(source: Dict[str, Any]) -> Dict[str, Any]:
         "article": _none_if_blank(source.get("article")),
         "section": _none_if_blank(source.get("section")),
         "basis_strength": _none_if_blank(source.get("basis_strength")),
+        "basis_explanation": _none_if_blank(source.get("basis_explanation")),
     }
 
 
