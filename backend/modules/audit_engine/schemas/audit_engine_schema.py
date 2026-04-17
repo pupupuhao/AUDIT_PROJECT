@@ -19,6 +19,7 @@ class BasisDocument(BaseModel):
     document_no: Optional[str] = None
     article: Optional[str] = None
     section: Optional[str] = None
+    basis_strength: Optional[str] = None
 
 
 class FieldMappingRecord(BaseModel):

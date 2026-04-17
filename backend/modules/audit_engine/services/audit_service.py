@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Sequence
 
-from modules.audit_engine.services.basis_resolver import build_from_reason_codes
+from modules.audit_engine.services.basis_resolver import build_default_compliant_basis, build_from_reason_codes
 from modules.audit_engine.services.rule_loader import load_rule_json
 
 
@@ -95,6 +95,7 @@ def _result(
     audit_path: Sequence[str],
     used_fields: Sequence[str],
     applicable: bool = True,
+    basis_documents_override: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     return {
         "applicable": applicable,
@@ -103,7 +104,11 @@ def _result(
         "reason_codes": list(reason_codes),
         "reasons": list(reasons),
         "missing_items": list(missing_items),
-        "basis_documents": build_from_reason_codes(reason_codes),
+        "basis_documents": (
+            list(basis_documents_override)
+            if basis_documents_override is not None
+            else build_from_reason_codes(reason_codes)
+        ),
         "audit_path": list(audit_path),
         "used_standard_fields": list(used_fields),
     }
@@ -224,6 +229,7 @@ def _audit_trace(fields: Dict[str, Any]) -> Dict[str, Any]:
         [],
         ["field_mapping_layer", "trace_audit", "trace_complete"],
         TRACE_FIELDS,
+        basis_documents_override=build_default_compliant_basis("trace_audit"),
     )
 
 
@@ -304,6 +310,7 @@ def _audit_process(fields: Dict[str, Any], trace_result: Dict[str, Any]) -> Dict
         [],
         ["field_mapping_layer", "process_audit", "normal_flow"],
         PROCESS_FIELDS,
+        basis_documents_override=build_default_compliant_basis("process_audit", "normal"),
     )
 
 

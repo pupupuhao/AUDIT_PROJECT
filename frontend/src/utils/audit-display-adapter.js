@@ -58,16 +58,6 @@ function dedupeStrings(values) {
   return output
 }
 
-function isFormalBasisSourceType(sourceType) {
-  const normalized = String(sourceType || '').toLowerCase()
-  return (
-    normalized.includes('regulation') ||
-    normalized.includes('law') ||
-    normalized.includes('standard') ||
-    normalized.includes('statute')
-  )
-}
-
 export function toCustomerReason(text) {
   return String(text || '').trim()
 }
@@ -85,18 +75,7 @@ export function getTopReasons(result) {
 
 export function getBasisList(basisDocuments) {
   const documents = basisDocuments || []
-  const formalValues = documents
-    .filter((item) => isFormalBasisSourceType(item?.source_type))
-    .map((item) => item?.display_name || item?.title)
-    .filter(Boolean)
-  const formalDeduped = dedupeStrings(formalValues)
-  if (formalDeduped.length) return formalDeduped
-
-  const nonFormalValues = documents.map((item) => item?.display_name || item?.title).filter(Boolean)
-  const nonFormalDeduped = dedupeStrings(nonFormalValues)
-  if (nonFormalDeduped.length) return nonFormalDeduped
-
-  return ['当前为业务痕迹/系统规则提示，暂无明确法规展示']
+  return dedupeStrings(documents.map((item) => item?.display_name || item?.title).filter(Boolean))
 }
 
 function getSubTone(item) {

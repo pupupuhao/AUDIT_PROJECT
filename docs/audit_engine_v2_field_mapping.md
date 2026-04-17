@@ -91,19 +91,38 @@ map_excel_row_to_audit_request(row: Dict[str, Any]) -> Dict[str, Any]
 
 | reason_code | 层级 | 强度 | 法规/依据 |
 |---|---|---|---|
-| `ENTITY_PUBLIC_REPAIR_OBJECT` | entity | strong | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条；《民法典》共有/专有条款 |
-| `ENTITY_PRIVATE_PART_NOT_ELIGIBLE` | entity | strong | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条；《民法典》共有/专有条款 |
-| `ENTITY_PROPERTY_SERVICE_SCOPE` | entity | strong | 《住宅专项维修资金管理办法》第十八条、第二十五条；DB31/T 360-2020 第8章 |
-| `ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW` | entity | weak | 维修对象目录映射复核规则 |
-| `ENTITY_FIELD_CONFLICT_MANUAL_REVIEW` | entity | weak | 标准字段冲突复核规则 |
-| trace 类 code | trace | weak | 系统中暂未发现对应业务痕迹，建议补充核验 |
-| `PROCESS_NORMAL_VOTE_MISSING` | process | strong | 《住宅专项维修资金管理办法》第二十二条、第二十三条；《民法典》第二百七十八条、第二百八十一条 |
-| `PROCESS_NORMAL_VOTE_NOT_LEGAL` | process | strong | 同上 |
-| `PROCESS_VOTE_DATE_MISSING` | process | weak | 缺少日期字段，无法完成时序校验 |
-| `PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED` | process | strong | 普通维修表决程序法规 |
-| `PROCESS_VOTE_DATE_PROXY_USED` | process | weak | 代用日期弱提示 |
+| `ENTITY_PUBLIC_REPAIR_OBJECT` | entity | strong | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条 |
+| `ENTITY_PRIVATE_PART_NOT_ELIGIBLE` | entity | strong | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条，按用途范围反向解释 |
+| `ENTITY_PROPERTY_SERVICE_SCOPE` | entity | strong | 《住宅专项维修资金管理办法》第二十五条；DB31/T 360-2020 第7章（保洁/清洁/卫生适用）、第8章（绿化/树木修剪/绿化养护适用） |
+| `ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW` | entity | weak | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条，用于背景性说明对象范围需核验 |
+| `ENTITY_FIELD_CONFLICT_MANUAL_REVIEW` | entity | weak | 《住宅专项维修资金管理办法》第十八条；《上海市商品住宅维修基金管理办法》第十三条，用于背景性说明字段冲突需核验 |
+| `TRACE_MISSING_VOTE_TRACE` | trace | weak | 《住宅专项维修资金管理办法》第二十二条、第二十三条；表达为“应履行业主表决程序，本系统未发现相关业务痕迹，建议补充核验” |
+| `TRACE_MISSING_CONSTRUCTION_CONTRACT` | trace | weak | 《住宅专项维修资金管理办法》第二十四条；表达为“通常应具备施工合同等材料，本系统未发现相关痕迹” |
+| `TRACE_MISSING_APPRAISAL_CONTRACT` | trace | weak | 《上海市商品住宅维修基金管理办法》第十三条；表达为审价合同是核验资金合理使用的过程依据 |
+| `TRACE_MISSING_APPRAISAL_REPORT` | trace | weak | 《上海市商品住宅维修基金管理办法》第十三条；表达为“通常需审价依据，本系统未发现相关痕迹” |
+| `TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED` | trace | weak | 《住宅专项维修资金管理办法》第十八条；表达为“通常应具备合同依据，本系统未发现签署痕迹” |
+| `PROCESS_NORMAL_VOTE_MISSING` | process | weak | 《住宅专项维修资金管理办法》第二十二条、第二十三条；缺流程信息的背景性提示 |
+| `PROCESS_NORMAL_VOTE_NOT_LEGAL` | process | strong | 《住宅专项维修资金管理办法》第二十二条、第二十三条；《民法典》第二百七十八条、第二百八十一条 |
+| `PROCESS_VOTE_DATE_MISSING` | process | weak | 《住宅专项维修资金管理办法》第二十二条、第二十三条；缺少表决日期，无法完成时序校验 |
+| `PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED` | process | weak | 《住宅专项维修资金管理办法》第二十二条、第二十三条；施工时间早于表决时间属于流程推导风险，建议核查，不写成直接违法 |
+| `PROCESS_VOTE_DATE_PROXY_USED` | process | weak | 《住宅专项维修资金管理办法》第二十二条、第二十三条；代用日期仅用于展示和弱校验 |
+| `PROCESS_PROPERTY_VALUE_UNSUPPORTED` | process | weak | 《住宅专项维修资金管理办法》第十八条、第二十四条；工程性质影响普通/紧急路径，需核验输入口径 |
 | `PROCESS_EMERGENCY_FLOW_EXEMPTED` | process | strong | 《住宅专项维修资金管理办法》第二十四条；《上海市商品住宅维修基金管理办法》第十四条；沪房管物〔2011〕326号 |
-| `PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED` | process | strong | 沪房管物〔2011〕326号 |
+| `PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED` | process | weak | 《住宅专项维修资金管理办法》第二十四条；沪房管物〔2011〕326号第二条至第四条，用于紧急维修事后资料背景性核验 |
 | amount 类 code | amount | none | 不绑定法规，仅展示 |
 
 `ENTITY_IN_WARRANTY` 和 `PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW` 保留为历史/预留说明，当前四层审计不主动发出。
+
+## 通过态默认合规依据
+
+当 `trace_audit` 或 `process_audit` 完全通过且未触发任何问题类 `reason_code` 时，后端仍会在分项 `basis_documents` 中补充默认合规依据。默认依据只用于分项展示，不新增 `reason_code`，也不进入顶层问题原因聚合。
+
+| 分项 | 场景 | 默认依据 | 强度 |
+|---|---|---|---|
+| `trace_audit` | 资料/手续痕迹字段齐备 | 《住宅专项维修资金管理办法》第二十二条、第二十三条 | weak |
+| `process_audit` | 普通维修流程字段初步通过 | 《住宅专项维修资金管理办法》第二十二条、第二十三条 | weak |
+| `process_audit` | 紧急维修流程通过态 | 《住宅专项维修资金管理办法》第二十四条 | strong |
+
+使用背景性法规表达的 code 包括：`ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW`、`ENTITY_FIELD_CONFLICT_MANUAL_REVIEW`、全部 trace 类 code、`PROCESS_NORMAL_VOTE_MISSING`、`PROCESS_VOTE_DATE_MISSING`、`PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED`、`PROCESS_VOTE_DATE_PROXY_USED`、`PROCESS_PROPERTY_VALUE_UNSUPPORTED`、`PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED`。这些 code 不写“违反第XX条”或“不符合第XX条规定”，只表达“依据/根据程序要求，当前未发现或无法确认，建议补充核验”。
+
+前端参考依据展示规则：除 `amount_info` 外，只要后端返回 `basis_documents`，页面按 `display_name` 原样展示，不再过滤 `source_type`，也不再回退为“系统审计规则”或“暂无明确法规展示”。`amount_info` 固定展示“金额层仅展示，不绑定法规依据”。
