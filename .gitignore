@@ -4,3 +4,4 @@
 
 __pycache__/
 *.py[cod]
+backend/log_file.log
