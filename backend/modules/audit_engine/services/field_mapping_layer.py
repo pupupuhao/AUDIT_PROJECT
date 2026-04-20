@@ -392,7 +392,7 @@ def _map_amount_field(
     return result, _record(field_name, result, source or "", field)
 
 
-def _derive_catalog_fields(project_name: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], Dict[str, Any]]:
+def _derive_catalog_fields(project_name: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]]:
     mapping_result = map_project_name(project_name)
     normalized_paths = [str(item.get("full_path", "")) for item in mapping_result.get("mapped_objects", [])]
     public_hit = any(
@@ -413,16 +413,7 @@ def _derive_catalog_fields(project_name: str) -> Tuple[Dict[str, Any], List[Dict
         _record("is_private_part", fields["is_private_part"], "catalog_mapping", "project_name"),
         _record("is_property_service_scope", fields["is_property_service_scope"], "catalog_mapping", "project_name"),
     ]
-    tags: List[str] = []
-    if public_hit:
-        tags.append("public_repair_object")
-    if private_hit:
-        tags.append("private_part")
-    if property_service_hit:
-        tags.append("property_service_scope")
-    if not tags and not mapping_result.get("mapped_objects"):
-        tags.append("unknown_object")
-    return fields, records, tags, mapping_result
+    return fields, records, mapping_result
 
 
 def _collect_unmapped_sources(sources: Dict[str, Dict[str, Any]], mapped_records: List[Dict[str, Any]]) -> List[str]:
@@ -515,7 +506,7 @@ def build_field_mapping_layer(payload: Dict[str, Any]) -> Dict[str, Any]:
             standard_fields[field_name] = value
             records.append(record)
 
-    catalog_fields, catalog_records, normalized_tags, mapping_result = _derive_catalog_fields(project_name)
+    catalog_fields, catalog_records, mapping_result = _derive_catalog_fields(project_name)
     for field_name, value in catalog_fields.items():
         standard_fields.setdefault(field_name, value)
     records.extend(catalog_records)
@@ -528,5 +519,4 @@ def build_field_mapping_layer(payload: Dict[str, Any]) -> Dict[str, Any]:
         "warnings": warnings,
         "mapped_objects": mapping_result.get("mapped_objects", []),
         "matched_object_ids": mapping_result.get("matched_object_ids", []),
-        "normalized_tags": normalized_tags,
     }

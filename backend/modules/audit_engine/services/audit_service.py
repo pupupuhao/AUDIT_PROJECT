@@ -133,7 +133,6 @@ def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict
     reasons: List[str] = []
     codes: List[str] = []
     missing: List[str] = []
-    tags = set(mapping_layer.get("normalized_tags", []))
     public_part = fields.get("is_public_part")
     private_part = fields.get("is_private_part")
     property_scope = fields.get("is_property_service_scope")
@@ -175,10 +174,7 @@ def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict
             ENTITY_FIELDS,
         )
 
-    if "unknown_object" in tags:
-        missing.append("project_name")
-    else:
-        missing.extend(["is_public_part", "is_private_part", "is_property_service_scope"])
+    missing.extend(["is_public_part", "is_private_part", "is_property_service_scope"])
     return _result(
         "manual_review",
         ["ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW"],
@@ -503,7 +499,6 @@ def audit_project(field_mapping_layer: Dict[str, Any]) -> Dict[str, Any]:
         "project_name": fields.get("project_name") or "",
         "mapped_objects": field_mapping_layer.get("mapped_objects", []),
         "matched_object_ids": field_mapping_layer.get("matched_object_ids", []),
-        "normalized_tags": field_mapping_layer.get("normalized_tags", []),
         "audit_path": ["field_mapping_layer", "entity_audit", "trace_audit", "process_audit", "amount_info"],
         "sub_audits": sub_audits,
         "field_mapping_layer": {

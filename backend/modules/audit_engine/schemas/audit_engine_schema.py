@@ -77,7 +77,6 @@ class AuditResponse(BaseModel):
     project_name: str
     mapped_objects: List[MappedObject] = Field(default_factory=list)
     matched_object_ids: List[int] = Field(default_factory=list)
-    normalized_tags: List[str] = Field(default_factory=list)
     overall_result: str
     display_result: str
     reason_codes: List[str] = Field(default_factory=list)
