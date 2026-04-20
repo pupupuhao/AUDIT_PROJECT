@@ -159,6 +159,7 @@ function buildPayload() {
   }
   if (form.has_hou_notion_sum) {
     payload.sources.hou_notion_sum = {
+      __row_exists__: true,
       count_hou: form.count_hou,
       agree_hou: form.agree_hou,
       sum_area: form.sum_area,
