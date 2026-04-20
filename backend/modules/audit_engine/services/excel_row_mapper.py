@@ -7,18 +7,30 @@ COLUMN_ALIASES: Dict[str, Tuple[str, str]] = {
     "project_name": ("text", "project_name"),
     "工程名称": ("text", "project_name"),
     "项目名称": ("text", "project_name"),
+    "wsname": ("text", "project_name"),
+    "工程名": ("text", "project_name"),
     "property": ("t_workspace", "property"),
     "工程性质": ("t_workspace", "property"),
+    "维修性质": ("t_workspace", "property"),
     "expirer_remark": ("blueprint_draft", "expirer_remark"),
     "保修备注": ("blueprint_draft", "expirer_remark"),
+    "保修说明": ("blueprint_draft", "expirer_remark"),
     "is_signed_pc": ("ws_project", "is_signed_pc"),
     "是否已签订施工合同": ("ws_project", "is_signed_pc"),
+    "施工合同": ("ws_project", "is_signed_pc"),
     "is_signed_esc": ("ws_project", "is_signed_esc"),
     "是否已签订审价合同": ("ws_project", "is_signed_esc"),
+    "审价合同": ("ws_project", "is_signed_esc"),
     "is_signed_esr": ("ws_project", "is_signed_esr"),
     "是否已出具审价报告": ("ws_project", "is_signed_esr"),
+    "审价报告": ("ws_project", "is_signed_esr"),
     "need_con": ("ws_project", "need_con"),
     "是否需要签订施工合同": ("ws_project", "need_con"),
+    "需要施工合同": ("ws_project", "need_con"),
+    "has_hou_notion_sum": ("hou_notion_sum", "__row_exists__"),
+    "存在表决汇总": ("hou_notion_sum", "__row_exists__"),
+    "是否存在表决汇总": ("hou_notion_sum", "__row_exists__"),
+    "有无表决汇总": ("hou_notion_sum", "__row_exists__"),
     "count_hou": ("hou_notion_sum", "count_hou"),
     "总户数": ("hou_notion_sum", "count_hou"),
     "agree_hou": ("hou_notion_sum", "agree_hou"),
@@ -52,6 +64,21 @@ def _is_present(value: Any) -> bool:
     return value is not None and value != ""
 
 
+def _to_bool_marker(value: Any) -> Any:
+    if value is None or value == "":
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "y", "yes", "是", "有", "存在", "已存在"}:
+        return True
+    if text in {"0", "false", "n", "no", "否", "无", "不存在"}:
+        return False
+    return value
+
+
 def map_excel_row_to_audit_request(row: Dict[str, Any]) -> Dict[str, Any]:
     """Map one parsed Excel row dict into the unified audit request shape.
 
@@ -76,6 +103,8 @@ def map_excel_row_to_audit_request(row: Dict[str, Any]) -> Dict[str, Any]:
                 unmapped_columns.append(normalized)
             continue
         source_name, source_field = target
+        if source_name == "hou_notion_sum" and source_field == "__row_exists__":
+            value = _to_bool_marker(value)
         sources.setdefault(source_name, {})[source_field] = value
 
     project_name = str(sources.get("text", {}).get("project_name") or "").strip()

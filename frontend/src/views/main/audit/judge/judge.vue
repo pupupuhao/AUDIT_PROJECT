@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
-import { judgeAuditEngine } from '@/service/audit-engine'
+import { judgeAuditEngine, judgeAuditFiles, parseAuditFiles } from '@/service/audit-engine'
 import {
   buildSubAuditView,
   getTopBasisView,
@@ -14,6 +14,10 @@ const loading = ref(false)
 const result = ref(null)
 const summaryBasisExpanded = ref(false)
 const expandedSubBasisKeys = ref([])
+const uploadFileList = ref([])
+const fileLoading = ref(false)
+const parseResult = ref(null)
+const fileJudgeResult = ref(null)
 
 const form = reactive({
   project_name: '',
@@ -127,6 +131,8 @@ const summaryBasisHasMore = computed(() => summaryBasisView.value.documents.leng
 const subAuditViews = computed(() =>
   subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, result.value?.sub_audits?.[meta.key]))
 )
+const parsedFiles = computed(() => parseResult.value?.files || [])
+const judgedFiles = computed(() => fileJudgeResult.value?.files || [])
 
 function buildPayload() {
   const projectName = String(form.project_name || '').trim()
@@ -223,6 +229,65 @@ function toggleSubBasis(key) {
   }
   expandedSubBasisKeys.value = [...expandedSubBasisKeys.value, key]
 }
+
+function beforeFileUpload() {
+  return false
+}
+
+function handleFileListChange(info) {
+  uploadFileList.value = info.fileList || []
+  parseResult.value = null
+  fileJudgeResult.value = null
+}
+
+function getSelectedFiles() {
+  return uploadFileList.value
+    .map((item) => item.originFileObj || item)
+    .filter(Boolean)
+}
+
+async function parseFiles() {
+  const files = getSelectedFiles()
+  if (!files.length) {
+    message.warning('请先选择 Excel 文件')
+    return
+  }
+  fileLoading.value = true
+  try {
+    parseResult.value = await parseAuditFiles(files)
+    fileJudgeResult.value = null
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+async function judgeFiles(params = {}) {
+  const files = getSelectedFiles()
+  if (!files.length) {
+    message.warning('请先选择 Excel 文件')
+    return
+  }
+  fileLoading.value = true
+  try {
+    fileJudgeResult.value = await judgeAuditFiles(files, params)
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+function getBatchItemStatus(item) {
+  if (item.error) return '审计失败'
+  return getTopStatusLabel(item.audit_result?.overall_result, item.audit_result?.display_result)
+}
+
+function getBatchItemReasons(item) {
+  if (item.error) return [item.error]
+  return getTopReasons(item.audit_result)
+}
+
+function getBatchSubAuditViews(auditResult) {
+  return subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, auditResult?.sub_audits?.[meta.key]))
+}
 </script>
 
 <template>
@@ -287,6 +352,155 @@ function toggleSubBasis(key) {
             <a-button :disabled="loading" @click="resetForm">重新开始</a-button>
           </a-space>
         </a-space>
+
+        <a-card title="Excel/文件上传审计" size="small" :bordered="true">
+          <a-space direction="vertical" size="middle" style="width: 100%">
+            <a-alert
+              type="info"
+              show-icon
+              message="当前版本正式支持 .xlsx；PDF/OCR 等文件会保留入口并返回暂不支持提示。"
+            />
+            <a-upload
+              v-model:file-list="uploadFileList"
+              multiple
+              accept=".xlsx,.xls,.pdf,.doc,.docx,.png,.jpg,.jpeg"
+              :before-upload="beforeFileUpload"
+              @change="handleFileListChange"
+            >
+              <a-button>选择文件</a-button>
+            </a-upload>
+            <a-space wrap>
+              <a-button :loading="fileLoading" :disabled="!uploadFileList.length" @click="parseFiles">
+                解析预览
+              </a-button>
+              <a-button
+                type="primary"
+                :loading="fileLoading"
+                :disabled="!uploadFileList.length"
+                @click="judgeFiles()"
+              >
+                批量审计
+              </a-button>
+            </a-space>
+
+            <template v-if="parsedFiles.length">
+              <div class="group-title">解析预览</div>
+              <a-collapse>
+                <a-collapse-panel
+                  v-for="(file, fileIndex) in parsedFiles"
+                  :key="`${file.filename}-${fileIndex}`"
+                  :header="`${file.filename || '未命名文件'}：${file.status}`"
+                >
+                  <a-space direction="vertical" size="small" style="width: 100%">
+                    <a-alert
+                      v-if="file.status !== 'parsed'"
+                      type="warning"
+                      show-icon
+                      :message="file.message || (file.warnings || []).join('；') || '文件暂不支持解析'"
+                    />
+                    <a-alert
+                      v-if="(file.warnings || []).length && file.status === 'parsed'"
+                      type="warning"
+                      show-icon
+                      :message="(file.warnings || []).join('；')"
+                    />
+                    <a-list
+                      v-if="(file.rows || []).length"
+                      size="small"
+                      bordered
+                      :data-source="file.rows"
+                    >
+                      <template #renderItem="{ item }">
+                        <a-list-item>
+                          <a-list-item-meta
+                            :title="`第 ${item.row_index} 行：${item.project_name || '未识别项目名称'}`"
+                            :description="`未识别列：${(item.unmapped_columns || []).join('、') || '无'}`"
+                          />
+                          <a-button
+                            size="small"
+                            :loading="fileLoading"
+                            @click="judgeFiles({ file_index: fileIndex, row_index: item.row_index })"
+                          >
+                            审计本行
+                          </a-button>
+                        </a-list-item>
+                      </template>
+                    </a-list>
+                    <a-empty v-else description="未解析到有效数据行" />
+                  </a-space>
+                </a-collapse-panel>
+              </a-collapse>
+            </template>
+
+            <template v-if="judgedFiles.length">
+              <div class="group-title">审计结果</div>
+              <a-collapse>
+                <a-collapse-panel
+                  v-for="(file, fileIndex) in judgedFiles"
+                  :key="`judged-${file.filename}-${fileIndex}`"
+                  :header="`${file.filename || '未命名文件'}：${file.status}`"
+                >
+                  <a-space direction="vertical" size="small" style="width: 100%">
+                    <a-alert
+                      v-if="file.status !== 'judged'"
+                      type="warning"
+                      show-icon
+                      :message="file.message || (file.warnings || []).join('；') || '文件未完成审计'"
+                    />
+                    <a-collapse v-if="(file.items || []).length">
+                      <a-collapse-panel
+                        v-for="item in file.items"
+                        :key="`row-${fileIndex}-${item.row_index}`"
+                        :header="`第 ${item.row_index} 行：${item.project_name || '未识别项目名称'} ｜ ${getBatchItemStatus(item)}`"
+                      >
+                        <a-space direction="vertical" size="middle" style="width: 100%">
+                          <a-alert
+                            v-if="item.error"
+                            type="error"
+                            show-icon
+                            :message="item.error"
+                          />
+                          <template v-else>
+                            <a-descriptions size="small" bordered :column="1">
+                              <a-descriptions-item label="项目名称">
+                                {{ item.audit_result.project_name }}
+                              </a-descriptions-item>
+                              <a-descriptions-item label="主结论">
+                                {{ getBatchItemStatus(item) }}
+                              </a-descriptions-item>
+                              <a-descriptions-item label="原因说明">
+                                <a-space direction="vertical" size="small">
+                                  <span v-for="reason in getBatchItemReasons(item)" :key="reason">{{ reason }}</span>
+                                </a-space>
+                              </a-descriptions-item>
+                              <a-descriptions-item label="未识别列">
+                                {{ (item.unmapped_columns || []).join('、') || '无' }}
+                              </a-descriptions-item>
+                            </a-descriptions>
+                            <a-card
+                              v-for="subItem in getBatchSubAuditViews(item.audit_result)"
+                              :key="`${item.row_index}-${subItem.key}`"
+                              size="small"
+                              :title="subItem.title"
+                              class="sub-audit-card"
+                              :class="`sub-audit-card--${subItem.tone}`"
+                            >
+                              <a-descriptions size="small" :column="1">
+                                <a-descriptions-item label="结论">{{ subItem.status }}</a-descriptions-item>
+                                <a-descriptions-item label="简短说明">{{ subItem.brief }}</a-descriptions-item>
+                              </a-descriptions>
+                            </a-card>
+                          </template>
+                        </a-space>
+                      </a-collapse-panel>
+                    </a-collapse>
+                    <a-empty v-else description="没有可展示的审计结果" />
+                  </a-space>
+                </a-collapse-panel>
+              </a-collapse>
+            </template>
+          </a-space>
+        </a-card>
 
         <template v-if="result">
           <a-alert

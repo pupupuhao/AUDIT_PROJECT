@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from io import BytesIO
+from typing import Any, Dict, List, Tuple
+
+from modules.audit_engine.services.excel_row_mapper import map_excel_row_to_audit_request
+
+
+def _cell_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _is_present(value: Any) -> bool:
+    return value is not None and value != ""
+
+
+def _build_headers(values: Tuple[Any, ...]) -> Tuple[List[str], List[str]]:
+    headers: List[str] = []
+    warnings: List[str] = []
+    seen: Dict[str, int] = {}
+
+    for index, value in enumerate(values, start=1):
+        header = str(value or "").strip()
+        if not header:
+            header = f"未命名列{index}"
+            warnings.append(f"第 {index} 列表头为空，已按 {header} 处理。")
+
+        count = seen.get(header, 0)
+        seen[header] = count + 1
+        if count:
+            unique_header = f"{header}__{count + 1}"
+            warnings.append(f"表头 {header} 重复，重复列已标记为 {unique_header}。")
+            header = unique_header
+        headers.append(header)
+
+    return headers, warnings
+
+
+def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
+    """Parse one .xlsx file into row-level audit requests.
+
+    Excel is only an input source. This service parses workbook rows and delegates
+    column-to-sources mapping to excel_row_mapper, then the audit pipeline still
+    consumes the standard sources shape.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise RuntimeError("缺少 openpyxl 依赖，无法解析 .xlsx 文件。") from exc
+
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    sheet = workbook.worksheets[0]
+    warnings: List[str] = []
+    rows: List[Dict[str, Any]] = []
+
+    row_iter = sheet.iter_rows(values_only=True)
+    try:
+        header_values = next(row_iter)
+    except StopIteration:
+        workbook.close()
+        return {
+            "filename": filename,
+            "file_type": "xlsx",
+            "status": "parsed",
+            "sheet_name": sheet.title,
+            "rows": [],
+            "documents": [],
+            "warnings": ["Excel 文件为空。"],
+        }
+
+    headers, header_warnings = _build_headers(header_values)
+    warnings.extend(header_warnings)
+
+    for excel_row_index, values in enumerate(row_iter, start=2):
+        row = {
+            header: _cell_value(values[index]) if index < len(values) else None
+            for index, header in enumerate(headers)
+        }
+        if not any(_is_present(value) for value in row.values()):
+            continue
+
+        mapped = map_excel_row_to_audit_request(row)
+        rows.append(
+            {
+                "row_index": excel_row_index,
+                "project_name": mapped.get("project_name") or "",
+                "raw_row": row,
+                "audit_request": {
+                    "project_name": mapped.get("project_name") or "",
+                    "sources": mapped.get("sources") or {},
+                },
+                "unmapped_columns": mapped.get("unmapped_columns") or [],
+            }
+        )
+
+    workbook.close()
+    return {
+        "filename": filename,
+        "file_type": "xlsx",
+        "status": "parsed",
+        "sheet_name": sheet.title,
+        "rows": rows,
+        "documents": [],
+        "warnings": warnings,
+    }
