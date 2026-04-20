@@ -1,380 +1,80 @@
-import json
+from __future__ import annotations
+
 from functools import lru_cache
-from datetime import date, datetime
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Sequence
 
-from modules.audit_engine.services.basis_resolver import resolve_basis_documents
-from modules.audit_engine.services.rule_loader import rule_file_path
+from modules.audit_engine.services.basis_resolver import build_default_compliant_basis, build_from_reason_codes
+from modules.audit_engine.services.rule_loader import load_rule_json
 
 
-FLOW_BY_STAGE = {
-    "INPUT_CHECK": "input_check_flow",
-    "CATALOG_CHECK": "input_check_flow",
-    "EXCLUSION_CHECK": "exclusion_flow",
-    "GRAY_CASE_ROUTING": "manual_review_flow",
-    "GRAY_CASE_REVIEW_CHECK": "gray_case_review_flow",
-    "EMERGENCY_CHECK": "emergency_flow",
-    "NORMAL_SCOPE_CHECK": "normal_flow",
-    "PROCESS_CHECK": "normal_flow",
+DISPLAY_MAPPING = {
+    "compliant": "初步符合",
+    "non_compliant": "疑似违规",
+    "need_supplement": "需补充材料",
+    "manual_review": "建议人工复核",
+    "info_only": "仅展示",
 }
-CONFIDENCE_ORDER = {"low": 1, "medium": 2, "high": 3}
-RESULT_PRECEDENCE = {
-    "non_compliant": 4,
-    "manual_review": 3,
-    "need_supplement": 2,
-    "compliant": 1,
-}
-STRUCTURED_INPUT_GROUPS = (
-    "scope_facts",
-    "process_facts",
-    "document_facts",
-    "timeline_facts",
-    "amount_facts",
-    "emergency_facts",
-    "gray_case_facts",
-)
-NON_FACT_FIELDS = {
+ENTITY_FIELDS = [
     "project_name",
-    "project_desc",
-    "matched_object_ids",
-    "normalized_tags",
-    "mapping_confidence",
-    "gray_case_type",
-    "split_projects",
-    "catalog_domains",
-    "source_documents",
-    "extracted_document_fields",
-    "field_confidence_map",
+    "is_public_part",
+    "is_private_part",
+    "is_property_service_scope",
+    "repair_nature",
+]
+TRACE_FIELDS = [
+    "repair_nature",
+    "is_emergency_repair",
+    "has_vote_trace",
+    "need_construction_contract",
+    "has_construction_contract",
+    "has_appraisal_contract",
+    "has_appraisal_report",
+]
+PROCESS_FIELDS = [
+    "property_raw_value",
+    "property_value_valid",
+    "repair_nature",
+    "is_emergency_repair",
+    "has_vote_trace",
+    "vote_pass_rate_by_household",
+    "vote_pass_rate_by_area",
+    "vote_legal",
+    "vote_date",
+    "vote_date_is_proxy",
+    "construction_start_date",
+    "is_before_vote_construct",
+]
+AMOUNT_FIELDS = ["budget_amount", "contract_amount"]
+ENTITY_CODES = {
+    "ENTITY_PUBLIC_REPAIR_OBJECT",
+    "ENTITY_PRIVATE_PART_NOT_ELIGIBLE",
+    "ENTITY_PROPERTY_SERVICE_SCOPE",
+    "ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW",
+    "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW",
 }
-EXCLUSION_REASON_CODES = {
-    "GREENING_MAINTENANCE",
-    "CLEANING_SANITATION",
-    "INSPECTION_TESTING",
-    "NEW_CONSTRUCTION",
-    "DAILY_SERVICE",
-    "OUTSIDE_SCOPE_PRIVATE_PART",
-    "PROPERTY_SERVICE_SCOPE",
+TRACE_CODES = {
+    "TRACE_MISSING_VOTE_TRACE",
+    "TRACE_MISSING_CONSTRUCTION_CONTRACT",
+    "TRACE_MISSING_APPRAISAL_CONTRACT",
+    "TRACE_MISSING_APPRAISAL_REPORT",
+    "TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED",
 }
-SCOPE_REASON_CODES = {
-    "IN_SCOPE_COMMON_PART",
-    "IN_SCOPE_COMMON_FACILITY",
+PROCESS_CODES = {
+    "PROCESS_NORMAL_VOTE_MISSING",
+    "PROCESS_NORMAL_VOTE_NOT_LEGAL",
+    "PROCESS_VOTE_DATE_MISSING",
+    "PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED",
+    "PROCESS_VOTE_DATE_PROXY_USED",
+    "PROCESS_EMERGENCY_FLOW_EXEMPTED",
+    "PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED",
+    "PROCESS_PROPERTY_VALUE_UNSUPPORTED",
 }
-
-
-def normalize_text(text: str) -> str:
-    return "".join((text or "").split())
-
-
-def simplify_text(text: str) -> str:
-    simplified = normalize_text(text)
-    for token in ("系统", "工程", "项目", "事项", "对象", "设施", "设备"):
-        simplified = simplified.replace(token, "")
-    return simplified
+AMOUNT_CODES = {"AMOUNT_BUDGET_DISPLAY", "AMOUNT_CONTRACT_DISPLAY", "AMOUNT_INFO_MISSING"}
 
 
 @lru_cache(maxsize=1)
-def load_rule_mapping() -> Dict[str, Any]:
-    path = rule_file_path("rule_mapping.json")
-    with path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
-
-
-@lru_cache(maxsize=1)
-def load_rule_engine() -> Dict[str, Any]:
-    path = rule_file_path("rule_engine.json")
-    with path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
-
-
-@lru_cache(maxsize=1)
-def load_output_schema() -> Dict[str, Any]:
-    path = rule_file_path("output_schema.json")
-    with path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
-
-
-def _contains_phrase(text: str, phrase: str) -> bool:
-    normalized_text = normalize_text(text)
-    normalized_phrase = normalize_text(phrase)
-    if normalized_phrase in normalized_text:
-        return True
-    return simplify_text(normalized_phrase) in simplify_text(normalized_text)
-
-
-def _score_mapping_entry(text: str, entry: Dict[str, Any]) -> Tuple[int, List[str]]:
-    hits: List[str] = []
-    score = 0
-    for phrase in entry.get("match_text", []):
-        if _contains_phrase(text, phrase):
-            hits.append(phrase)
-            score += max(2, len(simplify_text(phrase)))
-    return score, hits
-
-
-def _select_mapping_entries(project_name: str, split_projects: Sequence[str]) -> List[Dict[str, Any]]:
-    mapping_config = load_rule_mapping()
-    parts = list(split_projects) or [project_name]
-    selected: List[Dict[str, Any]] = []
-    seen_ids: Set[str] = set()
-
-    for part in parts:
-        best_entry: Optional[Dict[str, Any]] = None
-        best_score = 0
-        best_hits: List[str] = []
-        for entry in mapping_config["mappings"]:
-            score, hits = _score_mapping_entry(part, entry)
-            if score > best_score or (score == best_score and len(hits) > len(best_hits)):
-                best_entry = entry
-                best_score = score
-                best_hits = hits
-        if best_entry is not None and best_score > 0 and best_entry["mapping_id"] not in seen_ids:
-            selected.append({**best_entry, "_hits": best_hits})
-            seen_ids.add(best_entry["mapping_id"])
-
-    if selected:
-        return selected
-
-    all_candidates: List[Tuple[int, int, Dict[str, Any], List[str]]] = []
-    for entry in mapping_config["mappings"]:
-        score, hits = _score_mapping_entry(project_name, entry)
-        if score <= 0:
-            continue
-        all_candidates.append((score, len(hits), entry, hits))
-    all_candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    for score, _hit_count, entry, hits in all_candidates[:2]:
-        if score <= 0 or entry["mapping_id"] in seen_ids:
-            continue
-        selected.append({**entry, "_hits": hits})
-        seen_ids.add(entry["mapping_id"])
-    return selected
-
-
-def _infer_tags_from_catalog(mapped_objects: Sequence[Dict[str, Any]], project_name: str) -> Tuple[List[str], Optional[str], str]:
-    tags: List[str] = []
-    gray_case_type: Optional[str] = None
-    confidence = "low"
-    normalized_text = normalize_text(project_name)
-
-    def add_tags(values: Iterable[str]) -> None:
-        for value in values:
-            if value not in tags:
-                tags.append(value)
-
-    for item in mapped_objects:
-        path = item["full_path"]
-        if path.startswith("电梯/"):
-            add_tags(["repairable_object", "shared_facility"])
-            confidence = "medium"
-        elif path.startswith("消防系统/") or path.startswith("消防泵/"):
-            add_tags(["repairable_object", "shared_facility"])
-            confidence = "medium"
-        elif path.startswith("排水、排污设施/") or path.startswith("供水系统/"):
-            add_tags(["repairable_object", "shared_facility"])
-            if any(keyword in normalized_text for keyword in ("爆裂", "堵塞", "故障", "抢修")):
-                add_tags(["emergency_scope"])
-            confidence = "medium"
-        elif path.startswith("楼栋外立面/") or "屋面" in path or "屋顶" in path:
-            add_tags(["repairable_object", "shared_part"])
-            confidence = "medium"
-        elif "公共窗户" in path and "玻璃" in path:
-            add_tags(["gray_case"])
-            gray_case_type = "weak"
-            confidence = "medium"
-
-    return tags, gray_case_type, confidence
-
-
-def build_normalized_tags(project_name: str, mapping_result: Dict[str, Any]) -> Dict[str, Any]:
-    selected_entries = _select_mapping_entries(project_name, mapping_result.get("split_projects", []))
-    normalized_tags: List[str] = []
-    gray_case_type: Optional[str] = None
-    mapping_confidence = "low"
-    matched_mapping_ids: List[str] = []
-
-    for entry in selected_entries:
-        matched_mapping_ids.append(entry["mapping_id"])
-        for tag in entry.get("normalized_tags", []):
-            if tag not in normalized_tags:
-                normalized_tags.append(tag)
-        confidence = entry.get("mapping_confidence", "low")
-        if CONFIDENCE_ORDER[confidence] > CONFIDENCE_ORDER[mapping_confidence]:
-            mapping_confidence = confidence
-        entry_gray_case_type = entry.get("gray_case_type")
-        if entry_gray_case_type == "strong":
-            gray_case_type = "strong"
-        elif entry_gray_case_type == "weak" and gray_case_type is None:
-            gray_case_type = "weak"
-
-    if not normalized_tags and mapping_result.get("mapped_objects"):
-        inferred_tags, inferred_gray_case_type, inferred_confidence = _infer_tags_from_catalog(
-            mapping_result["mapped_objects"],
-            project_name,
-        )
-        for tag in inferred_tags:
-            if tag not in normalized_tags:
-                normalized_tags.append(tag)
-        gray_case_type = gray_case_type or inferred_gray_case_type
-        mapping_confidence = inferred_confidence
-
-    catalog_domains = mapping_result.get("catalog_domains", [])
-    if len(mapping_result.get("split_projects", [])) > 1 or len(catalog_domains) > 1:
-        if "multi_project" not in normalized_tags:
-            normalized_tags.insert(0, "multi_project")
-
-    if not normalized_tags and not mapping_result.get("matched_object_ids"):
-        normalized_tags.append("unknown")
-
-    return {
-        "normalized_tags": normalized_tags,
-        "gray_case_type": gray_case_type,
-        "mapping_confidence": mapping_confidence,
-        "matched_mapping_ids": matched_mapping_ids,
-    }
-
-
-def _merge_structured_request(request_payload: Dict[str, Any]) -> Dict[str, Any]:
-    merged = dict(request_payload)
-    facts_value = request_payload.get("facts")
-    if isinstance(facts_value, dict):
-        for field, value in facts_value.items():
-            if merged.get(field) is None:
-                merged[field] = value
-    for group_name in STRUCTURED_INPUT_GROUPS:
-        group_value = request_payload.get(group_name)
-        if not isinstance(group_value, dict):
-            continue
-        for field, value in group_value.items():
-            if merged.get(field) is None:
-                merged[field] = value
-
-    parse_context = request_payload.get("document_parse_context")
-    if isinstance(parse_context, dict):
-        for field in ("source_documents", "extracted_document_fields", "field_confidence_map"):
-            if merged.get(field) is None:
-                merged[field] = parse_context.get(field)
-    return merged
-
-
-def _build_rule_context(
-    request_payload: Dict[str, Any],
-    mapping_result: Dict[str, Any],
-    tag_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    normalized_payload = _merge_structured_request(request_payload)
-    context = {
-        "project_name": normalized_payload.get("project_name"),
-        "project_desc": normalized_payload.get("project_desc"),
-        "matched_object_ids": mapping_result.get("matched_object_ids", []),
-        "normalized_tags": tag_result.get("normalized_tags", []),
-        "mapping_confidence": tag_result.get("mapping_confidence"),
-        "gray_case_type": tag_result.get("gray_case_type"),
-        "split_projects": mapping_result.get("split_projects", []),
-        "catalog_domains": mapping_result.get("catalog_domains", []),
-        "source_documents": normalized_payload.get("source_documents", []),
-        "extracted_document_fields": normalized_payload.get("extracted_document_fields", {}),
-        "field_confidence_map": normalized_payload.get("field_confidence_map", {}),
-    }
-
-    for field in load_rule_engine()["input_schema"]["optional_fields"]:
-        if field not in context:
-            context[field] = normalized_payload.get(field)
-
-    return context
-
-
-def _evaluate_condition(condition: Dict[str, Any], context: Dict[str, Any]) -> bool:
-    if "all" in condition:
-        return all(_evaluate_condition(item, context) for item in condition["all"])
-    if "any" in condition:
-        return any(_evaluate_condition(item, context) for item in condition["any"])
-
-    field = condition["field"]
-    op = condition["op"]
-    value = condition.get("value")
-    current = context.get(field)
-
-    if op == "contains":
-        return isinstance(current, Sequence) and not isinstance(current, (str, bytes)) and value in current
-    if op == "length_gt":
-        return isinstance(current, Sequence) and not isinstance(current, (str, bytes)) and len(current) > value
-    if op == "empty_array":
-        return isinstance(current, Sequence) and not isinstance(current, (str, bytes)) and len(current) == 0
-    if op == "empty_or_null":
-        return current is None or current == ""
-    if op == "not_empty_or_null":
-        return current is not None and current != ""
-    if op == "not_eq":
-        return current != value
-    if op == "is_false":
-        return current is False
-    if op == "eq":
-        return current == value
-    if op == "gte":
-        return current is not None and current >= value
-    if op == "lt":
-        if current is None:
-            return False
-        candidate_value = value
-        if isinstance(value, str) and value in context:
-            candidate_value = context.get(value)
-        left = _normalize_comparable_value(current)
-        right = _normalize_comparable_value(candidate_value)
-        if left is None or right is None:
-            return False
-        try:
-            return left < right
-        except TypeError:
-            return False
-    if op == "empty_after_strip_terms":
-        if current is None:
-            return True
-        reduced = normalize_text(str(current))
-        for term in condition.get("terms", []):
-            reduced = reduced.replace(normalize_text(str(term)), "")
-        reduced = reduced.strip(condition.get("strip_chars", "-_/"))
-        return len(reduced) == 0
-    if op == "contains_any_text":
-        if current is None:
-            return False
-        haystack = normalize_text(str(current))
-        for candidate in condition.get("values", []):
-            if normalize_text(str(candidate)) in haystack:
-                return True
-        return False
-    raise ValueError(f"不支持的规则操作: {op}")
-
-
-def _normalize_comparable_value(value: Any) -> Optional[Any]:
-    if isinstance(value, (int, float)):
-        return value
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            return datetime.fromisoformat(text).date()
-        except ValueError:
-            return text
-    return None
-
-
-def _collect_missing_items(condition: Dict[str, Any], context: Dict[str, Any]) -> List[str]:
-    missing_items: List[str] = []
-    if "all" in condition or "any" in condition:
-        key = "all" if "all" in condition else "any"
-        for item in condition[key]:
-            missing_items.extend(_collect_missing_items(item, context))
-        return missing_items
-
-    if condition["op"] == "eq" and condition.get("value") is False and context.get(condition["field"]) is False:
-        return [condition["field"]]
-    if condition["op"] == "empty_or_null" and (context.get(condition["field"]) is None or context.get(condition["field"]) == ""):
-        return [condition["field"]]
-    if condition["op"] == "empty_after_strip_terms" and _evaluate_condition(condition, context):
-        return [condition["field"]]
-    return []
+def load_reason_code_definitions() -> Dict[str, Any]:
+    return load_rule_json("audit_reason_codes.json")
 
 
 def _append_unique(items: List[str], values: Iterable[str]) -> None:
@@ -383,406 +83,434 @@ def _append_unique(items: List[str], values: Iterable[str]) -> None:
             items.append(value)
 
 
-def _build_basis_documents(triggered_rules: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    basis_documents: List[Dict[str, Any]] = []
-    seen: Set[Tuple[Any, ...]] = set()
-    for rule in triggered_rules:
-        source = rule.get("source")
-        if not source:
-            continue
-        key = (
-            source.get("display_name"),
-            source.get("title"),
-            source.get("article"),
-            source.get("section"),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        basis_documents.append(
-            {
-                "display_name": source.get("display_name"),
-                "source_type": source.get("source_type"),
-                "title": source.get("title"),
-                "issuer": source.get("issuer"),
-                "document_no": source.get("document_no"),
-                "article": source.get("article"),
-                "section": source.get("section"),
-            }
-        )
-    return basis_documents
-
-
-def _build_display_result(overall_result: str) -> str:
-    return load_output_schema()["display_mapping"][overall_result]
-
-
-def _get_ordered_active_rules(engine: Dict[str, Any]) -> List[Dict[str, Any]]:
-    stage_order = {stage: index for index, stage in enumerate(engine["decision_flow"])}
-    active_rules = [rule for rule in engine["rules"] if rule.get("is_active", True)]
-    return sorted(active_rules, key=lambda rule: (stage_order.get(rule["stage"], 999), rule["priority"]))
-
-
-def _get_rule_dimensions(rule: Dict[str, Any]) -> List[str]:
-    dimensions = rule.get("audit_dimensions", [])
-    if isinstance(dimensions, str):
-        return [dimensions]
-    return list(dimensions)
-
-
-def _is_business_fact_field(field_name: str) -> bool:
-    return field_name not in NON_FACT_FIELDS
-
-
-def _collect_present_facts(context: Dict[str, Any], field_names: Sequence[str]) -> List[str]:
-    present: List[str] = []
-    for field_name in field_names:
-        if not _is_business_fact_field(field_name):
-            continue
-        value = context.get(field_name)
-        if value is None or value == "":
-            continue
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) and len(value) == 0:
-            continue
-        present.append(field_name)
-    return present
-
-
-def _collect_condition_fields(condition: Dict[str, Any]) -> List[str]:
-    fields: List[str] = []
-    if "all" in condition or "any" in condition:
-        key = "all" if "all" in condition else "any"
-        for item in condition[key]:
-            _append_unique(fields, _collect_condition_fields(item))
-        return fields
-
-    field_name = condition.get("field")
-    if field_name and _is_business_fact_field(field_name):
-        fields.append(field_name)
-    return fields
-
-
-def _collect_required_missing_fields(context: Dict[str, Any], field_names: Sequence[str]) -> List[str]:
-    missing: List[str] = []
-    for field_name in field_names:
-        value = context.get(field_name)
-        if value is None or value == "":
-            missing.append(field_name)
-    return missing
-
-
-def _build_sub_audit_result(
-    sub_audit_key: str,
-    definition: Dict[str, Any],
-    context: Dict[str, Any],
-    ordered_rules: Sequence[Dict[str, Any]],
-) -> Dict[str, Any]:
-    applicable_when = definition.get("applicable_when")
-    applicable = True if not applicable_when else _evaluate_condition(applicable_when, context)
-    facts_used = _collect_present_facts(context, definition.get("facts_used_fields", []))
-
-    if not applicable:
-        return {
-            "applicable": False,
-            "result": None,
-            "display_result": None,
-            "reason_codes": [],
-            "reasons": [],
-            "missing_items": [],
-            "basis_documents": [],
-            "audit_path": [],
-            "facts_used": facts_used,
-        }
-
-    for rule in ordered_rules:
-        if sub_audit_key not in _get_rule_dimensions(rule):
-            continue
-        if not _evaluate_condition(rule["when"], context):
-            continue
-        then = rule["then"]
-        stage_path = FLOW_BY_STAGE.get(rule["stage"], rule["stage"].lower())
-        rule_facts_used = list(facts_used)
-        _append_unique(rule_facts_used, _collect_condition_fields(rule["when"]))
-        if then["result"] == "continue":
-            sub_audit_result = then.get("sub_audit_result")
-            if not sub_audit_result:
-                continue
-            reason_codes = list(then.get("reason_codes", []))
-            return {
-                "applicable": True,
-                "result": sub_audit_result,
-                "display_result": _build_display_result(sub_audit_result),
-                "reason_codes": reason_codes,
-                "reasons": [then["message"]] if then.get("message") else [],
-                "missing_items": [],
-                "basis_documents": resolve_basis_documents(
-                    reason_codes,
-                    fallback_sources=_build_basis_documents([rule]),
-                ),
-                "audit_path": [stage_path, sub_audit_key],
-                "facts_used": rule_facts_used,
-            }
-        reason_codes = list(then.get("reason_codes", []))
-        return {
-            "applicable": True,
-            "result": then["result"],
-            "display_result": _build_display_result(then["result"]),
-            "reason_codes": reason_codes,
-            "reasons": [then["message"]],
-            "missing_items": _collect_missing_items(rule["when"], context),
-            "basis_documents": resolve_basis_documents(
-                reason_codes,
-                fallback_sources=_build_basis_documents([rule]),
-            ),
-            "audit_path": [stage_path, sub_audit_key],
-            "facts_used": rule_facts_used,
-        }
-
-    default_result = definition.get("default_result")
-    default_reason_codes = list(definition.get("default_reason_codes", []))
-    return {
-        "applicable": True,
-        "result": default_result,
-        "display_result": _build_display_result(default_result) if default_result else None,
-        "reason_codes": default_reason_codes,
-        "reasons": [definition["default_message"]] if definition.get("default_message") else [],
-        "missing_items": _collect_required_missing_fields(context, definition.get("required_fields", [])),
-        "basis_documents": resolve_basis_documents(default_reason_codes),
-        "audit_path": list(definition.get("default_audit_path", [])),
-        "facts_used": facts_used,
-    }
-
-
-def _build_sub_audits(context: Dict[str, Any], ordered_rules: Sequence[Dict[str, Any]], engine: Dict[str, Any]) -> Dict[str, Any]:
-    sub_audits: Dict[str, Any] = {}
-    for sub_audit_key, definition in engine.get("sub_audit_definitions", {}).items():
-        sub_audits[sub_audit_key] = _build_sub_audit_result(sub_audit_key, definition, context, ordered_rules)
-    return sub_audits
-
-
-def _get_top_level_effect(rule: Dict[str, Any]) -> str:
-    return rule.get("top_level_effect", "direct")
-
-
-def _collect_terminal_signal(
-    rule: Dict[str, Any],
-    context: Dict[str, Any],
-    then: Dict[str, Any],
-) -> Dict[str, Any]:
-    reason_codes = list(then.get("reason_codes", []))
-    message = then.get("message")
-    return {
-        "rule": rule,
-        "result": then["result"],
-        "reason_codes": reason_codes,
-        "reasons": [message] if message else [],
-        "missing_items": _collect_missing_items(rule["when"], context),
-        "effect": _get_top_level_effect(rule),
-    }
-
-
-def _pick_best_signal(signals: Sequence[Dict[str, Any]], stage_order: Dict[str, int]) -> Optional[Dict[str, Any]]:
-    if not signals:
+def _display(result: str | None) -> str | None:
+    if result is None:
         return None
-    return min(
-        signals,
-        key=lambda item: (
-            stage_order.get(item["rule"]["stage"], 999),
-            item["rule"].get("priority", 9999),
-            -RESULT_PRECEDENCE.get(item["result"], 0),
+    return DISPLAY_MAPPING.get(result, result)
+
+
+def _result(
+    result: str,
+    reason_codes: Sequence[str],
+    reasons: Sequence[str],
+    missing_items: Sequence[str],
+    audit_path: Sequence[str],
+    used_fields: Sequence[str],
+    applicable: bool = True,
+    basis_documents_override: Sequence[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    return {
+        "applicable": applicable,
+        "result": result,
+        "display_result": _display(result),
+        "reason_codes": list(reason_codes),
+        "reasons": list(reasons),
+        "missing_items": list(missing_items),
+        "basis_documents": (
+            list(basis_documents_override)
+            if basis_documents_override is not None
+            else build_from_reason_codes(reason_codes)
+        ),
+        "audit_path": list(audit_path),
+        "used_standard_fields": list(used_fields),
+    }
+
+
+def _validate_code_categories(sub_audits: Dict[str, Dict[str, Any]]) -> None:
+    expected = {
+        "entity_audit": ENTITY_CODES,
+        "trace_audit": TRACE_CODES,
+        "process_audit": PROCESS_CODES,
+        "amount_info": AMOUNT_CODES,
+    }
+    for key, allowed_codes in expected.items():
+        for code in sub_audits.get(key, {}).get("reason_codes", []):
+            if code not in allowed_codes:
+                raise ValueError(f"{key} 使用了非本层 reason_code: {code}")
+
+
+def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict[str, Any]:
+    reasons: List[str] = []
+    codes: List[str] = []
+    missing: List[str] = []
+    tags = set(mapping_layer.get("normalized_tags", []))
+    public_part = fields.get("is_public_part")
+    private_part = fields.get("is_private_part")
+    property_scope = fields.get("is_property_service_scope")
+
+    if public_part is True and (private_part is True or property_scope is True):
+        return _result(
+            "manual_review",
+            ["ENTITY_FIELD_CONFLICT_MANUAL_REVIEW"],
+            ["目录映射显示为共用维修对象，但来源字段或项目语义存在专有部分/物业维保冲突，需人工复核。"],
+            [],
+            ["field_mapping_layer", "entity_audit", "field_conflict"],
+            ENTITY_FIELDS,
+        )
+    if private_part is True:
+        return _result(
+            "non_compliant",
+            ["ENTITY_PRIVATE_PART_NOT_ELIGIBLE"],
+            ["项目属于业主专有部分，不符合维修资金使用条件。"],
+            [],
+            ["field_mapping_layer", "entity_audit", "private_part"],
+            ENTITY_FIELDS,
+        )
+    if property_scope is True:
+        return _result(
+            "non_compliant",
+            ["ENTITY_PROPERTY_SERVICE_SCOPE"],
+            ["项目属于物业日常服务或维保范围，不符合维修资金使用条件。"],
+            [],
+            ["field_mapping_layer", "entity_audit", "property_service_scope"],
+            ENTITY_FIELDS,
+        )
+    if public_part is True:
+        return _result(
+            "compliant",
+            ["ENTITY_PUBLIC_REPAIR_OBJECT"],
+            ["项目属于共用部位或共用设施设备维修对象，本体合规初步通过。"],
+            [],
+            ["field_mapping_layer", "entity_audit", "public_repair_object"],
+            ENTITY_FIELDS,
+        )
+
+    if "unknown_object" in tags:
+        missing.append("project_name")
+    else:
+        missing.extend(["is_public_part", "is_private_part", "is_property_service_scope"])
+    return _result(
+        "manual_review",
+        ["ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW"],
+        ["项目本体对象或维修范围无法通过标准字段确认，需人工复核。"],
+        missing,
+        ["field_mapping_layer", "entity_audit", "object_unknown"],
+        ENTITY_FIELDS,
+    )
+
+
+def _audit_trace(fields: Dict[str, Any]) -> Dict[str, Any]:
+    codes: List[str] = []
+    reasons: List[str] = []
+    missing: List[str] = []
+    is_emergency = fields.get("repair_nature") == "emergency" or fields.get("is_emergency_repair") is True
+
+    if not is_emergency and fields.get("has_vote_trace") is not True:
+        codes.append("TRACE_MISSING_VOTE_TRACE")
+        reasons.append("缺少业主表决痕迹，需补充表决汇总或相关材料。")
+        missing.append("has_vote_trace")
+    if fields.get("need_construction_contract") is True and fields.get("has_construction_contract") is not True:
+        codes.append("TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED")
+        reasons.append(
+            "当前项目需要施工合同，但未见施工合同签署痕迹。"
+            if not is_emergency
+            else "紧急维修仍需补充施工合同或事后确认材料，当前未见施工合同签署痕迹。"
+        )
+        missing.append("has_construction_contract")
+    elif fields.get("has_construction_contract") is not True:
+        codes.append("TRACE_MISSING_CONSTRUCTION_CONTRACT")
+        reasons.append(
+            "缺少施工合同签署痕迹，需补充施工合同材料。"
+            if not is_emergency
+            else "紧急维修未见施工合同或事后施工资料痕迹，建议补充核验。"
+        )
+        missing.append("has_construction_contract")
+    if fields.get("has_appraisal_contract") is not True:
+        codes.append("TRACE_MISSING_APPRAISAL_CONTRACT")
+        reasons.append(
+            "缺少审价合同签署痕迹，需补充审价合同材料。"
+            if not is_emergency
+            else "紧急维修未见审价/结算委托痕迹，建议补充事后审价或结算材料。"
+        )
+        missing.append("has_appraisal_contract")
+    if fields.get("has_appraisal_report") is not True:
+        codes.append("TRACE_MISSING_APPRAISAL_REPORT")
+        reasons.append(
+            "缺少审价报告痕迹，需补充审价报告材料。"
+            if not is_emergency
+            else "紧急维修未见审价报告或结算审核痕迹，建议补充事后审价/结算资料。"
+        )
+        missing.append("has_appraisal_report")
+
+    if codes:
+        return _result(
+            "need_supplement",
+            codes,
+            reasons,
+            missing,
+            ["field_mapping_layer", "trace_audit", "trace_missing"],
+            TRACE_FIELDS,
+        )
+    return _result(
+        "compliant",
+        [],
+        ["资料/手续痕迹字段齐备。"],
+        [],
+        ["field_mapping_layer", "trace_audit", "trace_complete"],
+        TRACE_FIELDS,
+        basis_documents_override=build_default_compliant_basis(
+            "trace_audit",
+            "emergency" if is_emergency else "normal",
         ),
     )
 
 
-def _classify_gap_categories(sub_audits: Dict[str, Any]) -> List[str]:
-    mapping = {
-        "process_audit": "流程",
-        "amount_audit": "金额",
-        "document_completeness_audit": "资料",
-        "timeline_audit": "时序",
-        "emergency_audit": "应急",
-    }
-    categories: List[str] = []
-    for key, label in mapping.items():
-        sub = sub_audits.get(key, {})
-        if not sub or sub.get("applicable") is False:
-            continue
-        result = sub.get("result")
-        if result in {"need_supplement", "manual_review", "non_compliant"}:
-            categories.append(label)
-    return categories
+def _audit_process(fields: Dict[str, Any], trace_result: Dict[str, Any]) -> Dict[str, Any]:
+    if fields.get("property_value_valid") is False:
+        return _result(
+            "manual_review",
+            ["PROCESS_PROPERTY_VALUE_UNSUPPORTED"],
+            ["工程性质 property 值不在当前支持范围内（仅支持 1=一般维修、2=急修），未按普通维修静默处理。"],
+            ["property"],
+            ["field_mapping_layer", "process_audit", "property_value_unsupported"],
+            PROCESS_FIELDS,
+        )
+
+    if fields.get("repair_nature") == "emergency" or fields.get("is_emergency_repair") is True:
+        codes = ["PROCESS_EMERGENCY_FLOW_EXEMPTED"]
+        reasons = ["紧急维修仅豁免普通维修流程，不豁免项目本体合规。"]
+        missing: List[str] = []
+        if trace_result.get("result") in {"need_supplement", "manual_review"}:
+            codes.append("PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED")
+            reasons.append("紧急维修仍需补充资料/手续痕迹以支撑事后复核。")
+            missing.extend(trace_result.get("missing_items", []))
+        return _result(
+            "manual_review" if len(codes) > 1 else "compliant",
+            codes,
+            reasons,
+            missing,
+            ["field_mapping_layer", "process_audit", "emergency_flow"],
+            PROCESS_FIELDS,
+        )
+
+    codes: List[str] = []
+    reasons: List[str] = []
+    missing: List[str] = []
+    if fields.get("has_vote_trace") is not True:
+        codes.append("PROCESS_NORMAL_VOTE_MISSING")
+        reasons.append("普通维修缺少业主表决流程信息。")
+        missing.append("has_vote_trace")
+    elif fields.get("vote_legal") is not True:
+        codes.append("PROCESS_NORMAL_VOTE_NOT_LEGAL")
+        reasons.append("普通维修表决通过率未达到当前口径或无法确认，建议人工复核。")
+        if fields.get("vote_legal") is None:
+            missing.extend(["vote_pass_rate_by_household", "vote_pass_rate_by_area"])
+    if fields.get("construction_start_date") and not fields.get("vote_date"):
+        codes.append("PROCESS_VOTE_DATE_MISSING")
+        reasons.append("缺少表决日期，无法完成普通维修开工与表决先后顺序校验。")
+        missing.append("vote_date")
+    elif fields.get("is_before_vote_construct") is True:
+        codes.append("PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED")
+        reasons.append("普通维修已确认存在先开工后表决的流程时序风险。")
+    if fields.get("vote_date_is_proxy") is True:
+        codes.append("PROCESS_VOTE_DATE_PROXY_USED")
+        reasons.append("当前 vote_date 使用征询日期或录入日期代替，仅用于展示和弱校验。")
+
+    if codes:
+        hard_codes = {
+            "PROCESS_NORMAL_VOTE_NOT_LEGAL",
+            "PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED",
+        }
+        if codes == ["PROCESS_VOTE_DATE_PROXY_USED"]:
+            result = "compliant"
+        elif any(code in hard_codes for code in codes):
+            result = "manual_review"
+        else:
+            result = "need_supplement"
+        return _result(
+            result,
+            codes,
+            reasons,
+            missing,
+            ["field_mapping_layer", "process_audit", "normal_flow"],
+            PROCESS_FIELDS,
+        )
+    return _result(
+        "compliant",
+        [],
+        ["普通维修流程字段初步符合当前审计口径。"],
+        [],
+        ["field_mapping_layer", "process_audit", "normal_flow"],
+        PROCESS_FIELDS,
+        basis_documents_override=build_default_compliant_basis("process_audit", "normal"),
+    )
 
 
-def _build_summary_conclusion(
-    overall_result: str,
-    reason_codes: Sequence[str],
-    sub_audits: Dict[str, Any],
-) -> Dict[str, Any]:
-    reason_set = set(reason_codes or [])
-    gap_categories = _classify_gap_categories(sub_audits)
-    scope = sub_audits.get("scope_audit", {}) or {}
-    scope_result = scope.get("result")
-    scope_compliant = scope.get("applicable") is True and scope_result == "compliant"
-
-    summary_type = "needs_more_info"
-    base_message = "需补充信息后继续审计"
-
-    if overall_result == "non_compliant" or any(code in reason_set for code in EXCLUSION_REASON_CODES):
-        summary_type = "non_compliant"
-        base_message = "初步判断不符合维修资金使用条件"
-    elif "FACT_CONFLICT_SCOPE" in reason_set:
-        summary_type = "scope_conflict_review"
-        base_message = "范围事实存在冲突，建议人工复核"
-    elif scope_compliant:
-        summary_type = "scope_prelim_pass"
-        base_message = "可纳入维修资金（初步判断）"
-
-    if summary_type == "scope_prelim_pass" and gap_categories:
-        display_summary = f"{base_message}，但存在{'/'.join(gap_categories)}缺口"
-    elif summary_type == "scope_prelim_pass":
-        display_summary = base_message
-    elif gap_categories and summary_type in {"needs_more_info", "scope_conflict_review"}:
-        display_summary = f"{base_message}（当前主要缺口：{'/'.join(gap_categories)}）"
+def _audit_amount(fields: Dict[str, Any]) -> Dict[str, Any]:
+    codes: List[str] = []
+    reasons: List[str] = []
+    missing: List[str] = []
+    budget_amount = fields.get("budget_amount")
+    contract_amount = fields.get("contract_amount")
+    if budget_amount is not None:
+        codes.append("AMOUNT_BUDGET_DISPLAY")
+        reasons.append(f"预算金额：{budget_amount:g}。")
     else:
-        display_summary = base_message
+        missing.append("budget_amount")
+    if contract_amount is not None:
+        codes.append("AMOUNT_CONTRACT_DISPLAY")
+        reasons.append(f"合同金额：{contract_amount:g}。")
+    else:
+        missing.append("contract_amount")
+    if not codes:
+        codes.append("AMOUNT_INFO_MISSING")
+        reasons.append("缺少预算金额和合同金额，金额层仅提示展示信息缺失。")
+    return _result(
+        "info_only",
+        codes,
+        reasons,
+        missing,
+        ["field_mapping_layer", "amount_info", "display_only"],
+        AMOUNT_FIELDS,
+    )
 
+
+def _collect_top_values(
+    sub_audits: Dict[str, Dict[str, Any]],
+    field_name: str,
+    ordered_keys: Sequence[str],
+) -> List[str]:
+    values: List[str] = []
+    for key in ordered_keys:
+        sub_result = sub_audits.get(key, {})
+        for value in sub_result.get(field_name, []) or []:
+            if value not in values:
+                values.append(value)
+    return values
+
+
+def _basis_dedupe_key(document: Dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(document.get("title") or ""),
+        str(document.get("document_no") or ""),
+        str(document.get("article") or ""),
+    )
+
+
+def _collect_basis_documents(sub_audits: Dict[str, Dict[str, Any]], ordered_keys: Sequence[str]) -> List[Dict[str, Any]]:
+    documents: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for key in ordered_keys:
+        for document in sub_audits.get(key, {}).get("basis_documents", []) or []:
+            dedupe_key = _basis_dedupe_key(document)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            documents.append(document)
+    return documents
+
+
+def _primary_basis_key(entity: Dict[str, Any], trace: Dict[str, Any], process: Dict[str, Any]) -> str:
+    if "PROCESS_PROPERTY_VALUE_UNSUPPORTED" in process.get("reason_codes", []):
+        return "process_audit"
+    if entity.get("result") in {"non_compliant", "manual_review"}:
+        return "entity_audit"
+    if process.get("result") in {"manual_review", "non_compliant"}:
+        return "process_audit"
+    if trace.get("result") == "need_supplement":
+        return "trace_audit"
+    if process.get("result") == "need_supplement":
+        return "process_audit"
+    return "entity_audit"
+
+
+def _reason_order(primary_key: str) -> List[str]:
+    if primary_key == "entity_audit":
+        return ["entity_audit", "trace_audit", "process_audit"]
+    if primary_key == "trace_audit":
+        return ["trace_audit", "process_audit", "entity_audit"]
+    if primary_key == "process_audit":
+        return ["process_audit", "entity_audit", "trace_audit"]
+    return ["entity_audit", "trace_audit", "process_audit"]
+
+
+def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    entity = sub_audits["entity_audit"]
+    trace = sub_audits["trace_audit"]
+    process = sub_audits["process_audit"]
+    if "PROCESS_PROPERTY_VALUE_UNSUPPORTED" in process.get("reason_codes", []):
+        overall = "manual_review"
+    elif entity["result"] == "non_compliant":
+        overall = "non_compliant"
+    elif entity["result"] == "manual_review":
+        overall = "manual_review"
+    elif process["result"] in {"manual_review", "non_compliant"}:
+        overall = process["result"]
+    elif trace["result"] == "need_supplement":
+        overall = "need_supplement"
+    elif process["result"] == "need_supplement":
+        overall = process["result"]
+    else:
+        overall = "compliant"
+
+    primary_key = _primary_basis_key(entity, trace, process)
+    ordered_reason_keys = _reason_order(primary_key)
+    reason_codes = _collect_top_values(sub_audits, "reason_codes", ordered_reason_keys)
+    reasons = _collect_top_values(sub_audits, "reasons", ordered_reason_keys)
+    missing_items = _collect_top_values(sub_audits, "missing_items", ordered_reason_keys)
+    top_basis_documents = _collect_basis_documents(sub_audits, [primary_key])
+    all_basis_documents = _collect_basis_documents(
+        sub_audits,
+        ["entity_audit", "trace_audit", "process_audit"],
+    )
+    manual_review_required = overall == "manual_review" or any(
+        sub.get("result") == "manual_review" for sub in sub_audits.values()
+    )
+    summary_type = overall
+    base_message = DISPLAY_MAPPING.get(overall, overall)
+    if overall == "compliant":
+        display_summary = "项目本体、资料痕迹和流程合规初步通过；金额层仅作展示。"
+    else:
+        display_summary = reasons[0] if reasons else base_message
     return {
-        "type": summary_type,
-        "scope_prelim_pass": scope_compliant,
-        "conflict_detected": "FACT_CONFLICT_SCOPE" in reason_set,
-        "gap_categories": gap_categories,
-        "primary_message": base_message,
+        "overall_result": overall,
+        "display_result": DISPLAY_MAPPING[overall],
+        "reason_codes": reason_codes,
+        "reasons": reasons,
+        "top_reasons": reasons,
+        "missing_items": missing_items,
+        "top_missing_items": missing_items,
+        "basis_documents": all_basis_documents,
+        "top_basis_documents": top_basis_documents,
+        "all_basis_documents": all_basis_documents,
+        "manual_review_required": manual_review_required,
+        "summary_conclusion": {
+            "type": summary_type,
+            "entity_pass": entity.get("result") == "compliant",
+            "conflict_detected": "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW" in entity.get("reason_codes", []),
+            "primary_message": reasons[0] if reasons else base_message,
+            "display_summary": display_summary,
+        },
         "display_summary": display_summary,
     }
 
 
-def _has_specific_missing_reason(reason_codes: Sequence[str]) -> bool:
-    return any(str(code).startswith("MISSING_") for code in reason_codes)
-
-
-def _finalize_top_reason_codes(
-    result: str,
-    reason_codes: List[str],
-    sub_audits: Dict[str, Any],
-) -> List[str]:
-    codes = list(reason_codes)
-    scope_sub = sub_audits.get("scope_audit", {}) or {}
-    scope_codes = [code for code in scope_sub.get("reason_codes", []) if code in SCOPE_REASON_CODES]
-    scope_compliant = scope_sub.get("applicable") is True and scope_sub.get("result") == "compliant"
-    has_conflict = "FACT_CONFLICT_SCOPE" in codes
-
-    if _has_specific_missing_reason(codes):
-        codes = [code for code in codes if code != "INSUFFICIENT_INFO"]
-
-    if result == "need_supplement" and scope_compliant and not has_conflict and scope_codes:
-        merged: List[str] = []
-        _append_unique(merged, scope_codes)
-        _append_unique(merged, codes)
-        codes = merged
-    else:
-        codes = [code for code in codes if code not in SCOPE_REASON_CODES]
-
-    return codes
-
-
-def audit_project(request_payload: Dict[str, Any], mapping_result: Dict[str, Any]) -> Dict[str, Any]:
-    normalized_payload = _merge_structured_request(request_payload)
-    project_name = normalized_payload.get("project_name", "")
-    tag_result = build_normalized_tags(project_name, mapping_result)
-    context = _build_rule_context(normalized_payload, mapping_result, tag_result)
-
-    engine = load_rule_engine()
-    ordered_rules = _get_ordered_active_rules(engine)
-    stage_order = {stage: index for index, stage in enumerate(engine["decision_flow"])}
-    sub_audits = _build_sub_audits(context, ordered_rules, engine)
-
-    audit_path: List[str] = ["mapping", "tag_mapping"]
-    triggered_rules: List[Dict[str, Any]] = []
-    terminal_signals: List[Dict[str, Any]] = []
-
-    for rule in ordered_rules:
-        if not _evaluate_condition(rule["when"], context):
-            continue
-        triggered_rules.append(rule)
-        _append_unique(audit_path, [FLOW_BY_STAGE.get(rule["stage"], rule["stage"].lower())])
-        then = rule["then"]
-        if then["result"] == "continue":
-            route_to = then.get("route_to")
-            if route_to == "NORMAL_SCOPE_CHECK":
-                _append_unique(audit_path, ["normal_flow"])
-            continue
-        terminal_signals.append(_collect_terminal_signal(rule, context, then))
-
-    direct_non_fallback = [
-        item
-        for item in terminal_signals
-        if item["effect"] == "direct" and item["rule"]["stage"] != "OUTPUT_BUILD"
-    ]
-    advisory_signals = [item for item in terminal_signals if item["effect"] == "advisory"]
-    fallback_direct = [
-        item
-        for item in terminal_signals
-        if item["effect"] == "direct" and item["rule"]["stage"] == "OUTPUT_BUILD"
-    ]
-
-    selected = _pick_best_signal(direct_non_fallback, stage_order)
-    if selected is None:
-        selected = _pick_best_signal(advisory_signals, stage_order)
-    if selected is None:
-        selected = _pick_best_signal(fallback_direct, stage_order)
-    if selected is None:
-        raise ValueError("rule_engine 未命中任何终态规则，请检查规则配置")
-
-    result = selected["result"]
-    reason_codes = list(selected["reason_codes"])
-    reasons = list(selected["reasons"])
-    missing_items = list(selected["missing_items"])
-
-    if selected["rule"]["stage"] == "OUTPUT_BUILD" and advisory_signals:
-        reason_codes = []
-        reasons = []
-        missing_items = []
-        for item in advisory_signals:
-            _append_unique(reason_codes, item["reason_codes"])
-            _append_unique(reasons, item["reasons"])
-            _append_unique(missing_items, item["missing_items"])
-        if not reasons:
-            reasons = list(selected["reasons"])
-
-    reason_codes = _finalize_top_reason_codes(
-        result=result,
-        reason_codes=reason_codes,
-        sub_audits=sub_audits,
-    )
-
-    manual_review_required = result == "manual_review"
-    if not manual_review_required and advisory_signals:
-        manual_review_required = True
-
-    summary_conclusion = _build_summary_conclusion(
-        overall_result=result,
-        reason_codes=reason_codes,
-        sub_audits=sub_audits,
-    )
-
+def audit_project(field_mapping_layer: Dict[str, Any]) -> Dict[str, Any]:
+    fields = dict(field_mapping_layer.get("standard_fields", {}))
+    entity = _audit_entity(fields, field_mapping_layer)
+    trace = _audit_trace(fields)
+    process = _audit_process(fields, trace)
+    amount = _audit_amount(fields)
+    sub_audits = {
+        "entity_audit": entity,
+        "trace_audit": trace,
+        "process_audit": process,
+        "amount_info": amount,
+    }
+    _validate_code_categories(sub_audits)
+    aggregate = _aggregate(sub_audits)
     return {
-        "project_name": project_name,
-        "mapped_objects": mapping_result.get("mapped_objects", []),
-        "matched_object_ids": mapping_result.get("matched_object_ids", []),
-        "normalized_tags": context["normalized_tags"],
-        "overall_result": result,
-        "display_result": _build_display_result(result),
-        "reason_codes": reason_codes,
-        "reasons": reasons,
-        "basis_documents": resolve_basis_documents(
-            reason_codes,
-            fallback_sources=_build_basis_documents(triggered_rules),
-        ),
-        "missing_items": missing_items,
-        "audit_path": audit_path,
-        "manual_review_required": manual_review_required,
+        "project_name": fields.get("project_name") or "",
+        "mapped_objects": field_mapping_layer.get("mapped_objects", []),
+        "matched_object_ids": field_mapping_layer.get("matched_object_ids", []),
+        "normalized_tags": field_mapping_layer.get("normalized_tags", []),
+        "audit_path": ["field_mapping_layer", "entity_audit", "trace_audit", "process_audit", "amount_info"],
         "sub_audits": sub_audits,
-        "document_extraction_targets": engine.get("document_extraction_targets", {}),
-        "summary_conclusion": summary_conclusion,
-        "display_summary": summary_conclusion["display_summary"],
+        "field_mapping_layer": {
+            "standard_fields": field_mapping_layer.get("standard_fields", {}),
+            "field_mappings": field_mapping_layer.get("field_mappings", []),
+            "unmapped_sources": field_mapping_layer.get("unmapped_sources", []),
+            "warnings": field_mapping_layer.get("warnings", []),
+        },
+        **aggregate,
     }

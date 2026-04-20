@@ -1,43 +1,50 @@
 const TOP_STATUS_LABELS = {
   compliant: '通过',
   need_supplement: '需补充',
-  manual_review: '存在风险',
-  non_compliant: '存在风险'
+  manual_review: '需复核',
+  non_compliant: '不符合'
 }
 
 const SUB_STATUS_LABELS = {
   compliant: '通过',
   need_supplement: '需补充',
-  manual_review: '存在风险',
-  non_compliant: '存在风险'
+  manual_review: '需复核',
+  non_compliant: '不符合',
+  info_only: '仅展示'
 }
 
 const SUB_DEFAULT_BRIEF = {
-  scope_audit: '当前场景的使用范围需进一步确认',
-  process_audit: '流程材料暂不完整，建议补充后复核',
-  document_completeness_audit: '资料链暂不完整，建议补充关键材料',
-  timeline_audit: '时序信息暂不完整，建议补充关键时间节点',
-  amount_audit: '金额信息暂不完整，建议补充预算与审批依据',
-  emergency_audit: '应急信息暂不完整，建议补充应急证明材料'
+  entity_audit: '项目使用范围需结合共用部位、专有部分和物业服务范围进行最终判断。',
+  trace_audit: '当前资料/手续痕迹字段齐备，初步满足本轮展示要求。',
+  process_audit: '当前流程字段初步满足本轮展示要求。',
+  amount_info: '金额与造价信息仅用于展示，不影响审计结论'
 }
 
 const REASON_CODE_BRIEF = {
-  MISSING_VOTE: '缺少业主表决相关材料',
-  MISSING_CONTRACT: '缺少施工合同相关材料',
-  MISSING_INVOICE: '缺少发票相关材料',
-  MISSING_ANNOUNCEMENT: '缺少公示相关材料',
-  MISSING_BUDGET_REVIEW: '缺少审价相关材料',
-  MISSING_PAYMENT_PROOF: '缺少付款凭证相关材料',
-  MISSING_SETTLEMENT_REPORT: '缺少结算相关材料',
-  MISSING_COMPLETION_REPORT: '缺少完工或验收相关材料'
+  ENTITY_PUBLIC_REPAIR_OBJECT: '项目属于共用部位或共用设施设备维修对象，符合专项维修资金使用范围。',
+  ENTITY_PRIVATE_PART_NOT_ELIGIBLE: '项目属于业主专有部分，不属于专项维修资金使用范围。',
+  ENTITY_PROPERTY_SERVICE_SCOPE: '项目属于物业日常服务或维保范围，不属于专项维修资金使用范围。',
+  ENTITY_IN_WARRANTY: '保修状态展示提示',
+  ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW: '项目维修对象或使用范围无法确认，需要补充材料后人工复核。',
+  ENTITY_FIELD_CONFLICT_MANUAL_REVIEW: '项目目录语义与来源字段存在冲突，需要人工复核使用范围。',
+  TRACE_MISSING_VOTE_TRACE: '当前资料/手续痕迹不完整，需补充业主表决材料后再核验。',
+  TRACE_MISSING_CONSTRUCTION_CONTRACT: '当前资料/手续痕迹不完整，需补充施工合同材料后再核验。',
+  TRACE_MISSING_APPRAISAL_CONTRACT: '当前资料/手续痕迹不完整，需补充审价合同材料后再核验。',
+  TRACE_MISSING_APPRAISAL_REPORT: '当前资料/手续痕迹不完整，需补充审价报告材料后再核验。',
+  TRACE_NEED_CONSTRUCTION_CONTRACT_NOT_SIGNED: '当前资料/手续痕迹不完整，需补充施工合同签署材料后再核验。',
+  PROCESS_NORMAL_VOTE_MISSING: '当前普通维修项目缺少表决流程信息，流程合规性需补充材料后判断。',
+  PROCESS_NORMAL_VOTE_NOT_LEGAL: '当前普通维修项目表决结果未达到展示口径或无法确认，流程合规性需复核。',
+  PROCESS_NORMAL_CONSTRUCTION_BEFORE_VOTE_REVIEW: '当前普通维修流程时序需要复核，需补充表决与开工时间材料。',
+  PROCESS_VOTE_DATE_MISSING: '当前普通维修项目缺少表决日期，无法完成流程时序校验。',
+  PROCESS_CONSTRUCTION_BEFORE_VOTE_CONFIRMED: '当前普通维修项目存在先开工后表决的时序风险，流程合规性需复核。',
+  PROCESS_VOTE_DATE_PROXY_USED: '当前表决日期使用代用日期，流程时序判断仅作为弱校验展示。',
+  PROCESS_EMERGENCY_FLOW_EXEMPTED: '当前项目按紧急维修程序审查，普通表决流程可豁免；流程判断以事后资料痕迹为主。',
+  PROCESS_EMERGENCY_TRACE_REVIEW_REQUIRED: '当前项目按紧急维修程序处理，普通表决流程可豁免；但事后资料痕迹不足，流程仍需补充。',
+  PROCESS_PROPERTY_VALUE_UNSUPPORTED: '当前工程性质字段超出支持范围，普通维修或紧急维修路径需人工复核。',
+  AMOUNT_BUDGET_DISPLAY: '预算金额展示',
+  AMOUNT_CONTRACT_DISPLAY: '合同金额展示',
+  AMOUNT_INFO_MISSING: '金额信息缺失'
 }
-
-const PHRASE_REPLACEMENTS = [
-  ['正向维修对象', '属于维修对象目录范围'],
-  ['需继续走完整审计链', '建议补充关键材料后继续审核'],
-  ['目录语义显示项目属于共用设施设备维修范围', '属于维修对象目录范围（共用设施）'],
-  ['目录语义显示项目属于共用部位维修范围', '属于维修对象目录范围（共用部位）']
-]
 
 function dedupeStrings(values) {
   const seen = new Set()
@@ -51,23 +58,8 @@ function dedupeStrings(values) {
   return output
 }
 
-function isFormalBasisSourceType(sourceType) {
-  const normalized = String(sourceType || '').toLowerCase()
-  return (
-    normalized.includes('regulation') ||
-    normalized.includes('law') ||
-    normalized.includes('standard') ||
-    normalized.includes('statute')
-  )
-}
-
 export function toCustomerReason(text) {
-  let normalized = String(text || '').trim()
-  if (!normalized) return ''
-  for (const [from, to] of PHRASE_REPLACEMENTS) {
-    normalized = normalized.replaceAll(from, to)
-  }
-  return normalized
+  return String(text || '').trim()
 }
 
 export function getTopStatusLabel(overallResult, displayResult) {
@@ -75,35 +67,54 @@ export function getTopStatusLabel(overallResult, displayResult) {
 }
 
 export function getTopReasons(result) {
-  const reasons = dedupeStrings((result?.reasons || []).map((item) => toCustomerReason(item)))
-  if (reasons.length) return reasons.slice(0, 2)
+  const values = result?.top_reasons?.length ? result.top_reasons : result?.reasons
+  const reasons = dedupeStrings((values || []).map((item) => toCustomerReason(item)))
+  if (reasons.length) return reasons.slice(0, 3)
   return ['暂无明确原因说明']
 }
 
-export function getTopGapText(summaryConclusion = {}) {
-  const categories = Array.isArray(summaryConclusion.gap_categories) ? summaryConclusion.gap_categories : []
-  return categories.length ? categories.join(' / ') : '暂无明显缺口'
-}
-
 export function getBasisList(basisDocuments) {
-  const values = (basisDocuments || [])
-    .filter((item) => isFormalBasisSourceType(item?.source_type))
-    .map((item) => item?.display_name || item?.title)
-    .filter(Boolean)
-  const deduped = dedupeStrings(values)
-  return deduped.length ? deduped : ['系统审计规则（基于工程审计经验）']
+  const documents = basisDocuments || []
+  return dedupeStrings(documents.map((item) => item?.display_name || item?.title).filter(Boolean))
 }
 
-export function isHighFreqDirectReject(auditPath) {
-  const list = Array.isArray(auditPath) ? auditPath.map((item) => String(item || '').toLowerCase()) : []
-  return list.includes('direct_reject')
+export function getTopBasisView(basisDocuments) {
+  return {
+    documents: getBasisList(basisDocuments || [])
+  }
+}
+
+export function getSubBasisPairs(basisDocuments) {
+  const documents = basisDocuments || []
+  const seen = new Set()
+  const pairs = []
+  for (const item of documents) {
+    const lawText = String(item?.display_name || item?.title || '').trim()
+    if (!lawText) continue
+    const basisExplanation = String(item?.basis_explanation || '当前依据用于本分项判断展示。').trim()
+    const key = `${lawText}__${basisExplanation}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pairs.push({ lawText, basisExplanation })
+  }
+  return pairs
+}
+
+export function getBasisView(basisDocuments) {
+  return {
+    documents: getBasisList(basisDocuments || []),
+    pairs: getSubBasisPairs(basisDocuments || [])
+  }
 }
 
 function getSubTone(item) {
   if (!item || item.applicable === false) return 'na'
   if (item.result === 'compliant') return 'success'
+  if (item.result === 'info_only') return 'info'
   if (item.result === 'need_supplement') return 'warning'
-  return 'risk'
+  if (item.result === 'manual_review') return 'review'
+  if (item.result === 'non_compliant') return 'error'
+  return 'review'
 }
 
 function getSubStatus(item) {
@@ -115,29 +126,27 @@ function getSubBrief(key, item) {
   if (!item || item.applicable === false) {
     return '当前场景暂不适用'
   }
-
-  if (key === 'scope_audit' && item.result === 'compliant') {
-    return '属于维修对象目录范围（初步判断）'
-  }
-
   const codes = Array.isArray(item.reason_codes) ? item.reason_codes : []
   for (const code of codes) {
     if (REASON_CODE_BRIEF[code]) return REASON_CODE_BRIEF[code]
   }
-
   const firstReason = toCustomerReason((item.reasons || [])[0] || '')
   if (firstReason) return firstReason
-
   return SUB_DEFAULT_BRIEF[key] || '建议补充相关信息后复核'
 }
 
 export function buildSubAuditView(key, title, item) {
+  const basisView =
+    key === 'amount_info'
+      ? { documents: ['金额层仅展示，不绑定法规依据'], pairs: [] }
+      : getBasisView(item?.basis_documents || [])
   return {
     key,
     title,
     tone: getSubTone(item),
     status: getSubStatus(item),
     brief: getSubBrief(key, item),
-    basis: getBasisList(item?.basis_documents || [])
+    basis: basisView.documents,
+    basisPairs: basisView.pairs
   }
 }

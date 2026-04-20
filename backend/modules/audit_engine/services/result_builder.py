@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from modules.audit_engine.services.basis_resolver import resolve_basis_documents
+from modules.audit_engine.services.basis_resolver import build_from_reason_codes
 
 
 DISPLAY_MAPPING = {
@@ -10,14 +10,7 @@ DISPLAY_MAPPING = {
     "manual_review": "建议人工复核",
 }
 
-SUB_AUDIT_KEYS = (
-    "scope_audit",
-    "process_audit",
-    "document_completeness_audit",
-    "timeline_audit",
-    "amount_audit",
-    "emergency_audit",
-)
+SUB_AUDIT_KEYS = ("entity_audit", "trace_audit", "process_audit", "amount_info")
 
 
 def _empty_sub_audit() -> Dict[str, Any]:
@@ -30,7 +23,7 @@ def _empty_sub_audit() -> Dict[str, Any]:
         "missing_items": [],
         "basis_documents": [],
         "audit_path": [],
-        "facts_used": [],
+        "used_standard_fields": [],
     }
 
 
@@ -54,19 +47,12 @@ def build_high_freq_result(
     display_result = DISPLAY_MAPPING.get(overall_result, DISPLAY_MAPPING["manual_review"])
     reason_codes = list(high_freq_result.get("reason_codes", []))
     reasons: List[str] = [high_freq_result.get("business_statement", "")] if high_freq_result.get("business_statement") else []
-    fallback_sources: List[Dict[str, Any]] = []
-    source = high_freq_result.get("source")
-    if isinstance(source, dict):
-        fallback_sources = [source]
-    elif isinstance(source, list):
-        fallback_sources = [item for item in source if isinstance(item, dict)]
-    basis_documents = resolve_basis_documents(reason_codes, fallback_sources=fallback_sources)
+    basis_documents = build_from_reason_codes(reason_codes)
     summary_message = reasons[0] if reasons else display_result
     summary_conclusion = {
         "type": "high_freq_routed",
         "scope_prelim_pass": False,
         "conflict_detected": False,
-        "gap_categories": [],
         "primary_message": summary_message,
         "display_summary": summary_message,
     }

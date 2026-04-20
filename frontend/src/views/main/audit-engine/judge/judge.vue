@@ -5,37 +5,35 @@ import { message } from 'ant-design-vue'
 import { judgeAuditEngine } from '@/service/audit-engine'
 import {
   buildSubAuditView,
-  getBasisList,
-  getTopGapText,
+  getTopBasisView,
   getTopReasons,
-  getTopStatusLabel,
-  isHighFreqDirectReject
+  getTopStatusLabel
 } from '@/utils/audit-display-adapter'
 
 const loading = ref(false)
 const result = ref(null)
+const summaryBasisExpanded = ref(false)
+const expandedSubBasisKeys = ref([])
 
 const form = reactive({
   project_name: '',
-  is_common_part: undefined,
-  is_common_facility: undefined,
-  is_private_part: undefined,
-  is_property_service_scope: undefined,
-  has_vote: undefined,
-  has_announcement: undefined,
-  has_budget_review: undefined,
-  has_contract: undefined,
-  has_site_photos: undefined,
-  has_rectification_notice: undefined,
-  has_completion_report: undefined,
-  has_acceptance_record: undefined,
-  has_invoice: undefined,
-  has_settlement_report: undefined,
-  has_payment_proof: undefined,
-  gray_case_evidence_complete: undefined,
-  has_damage_assessment: undefined,
-  is_emergency: undefined,
-  has_emergency_proof: undefined
+  property: undefined,
+  expirer_remark: '',
+  is_signed_pc: undefined,
+  is_signed_esc: undefined,
+  is_signed_esr: undefined,
+  need_con: undefined,
+  has_hou_notion_sum: undefined,
+  count_hou: undefined,
+  agree_hou: undefined,
+  sum_area: undefined,
+  agree_area: undefined,
+  request_startdate: '',
+  request_enddate: '',
+  reg_date: '',
+  startup_date: '',
+  orgn_amt: undefined,
+  contract_amt: undefined
 })
 
 const boolSelectOptions = [
@@ -44,67 +42,67 @@ const boolSelectOptions = [
   { label: '否', value: false }
 ]
 
+const propertySelectOptions = [
+  { label: '未填写', value: undefined },
+  { label: '一般维修（1）', value: 1 },
+  { label: '急修（2）', value: 2 }
+]
+
 const optionalFieldGroups = [
   {
-    title: '范围相关',
+    title: '工程主表 / 预案',
     fields: [
-      { key: 'is_common_part', label: '共用部位' },
-      { key: 'is_common_facility', label: '共用设施' },
-      { key: 'is_private_part', label: '专有部分' },
-      { key: 'is_property_service_scope', label: '物业服务范围' }
+      { key: 'property', label: '工程性质 property', type: 'property' },
+      { key: 'expirer_remark', label: '保修备注', type: 'text' }
     ]
   },
   {
-    title: '流程相关',
+    title: '业务痕迹',
     fields: [
-      { key: 'has_vote', label: '有无表决' },
-      { key: 'has_announcement', label: '有无公示' },
-      { key: 'has_budget_review', label: '有无审价' },
-      { key: 'has_contract', label: '有无合同' }
+      { key: 'is_signed_pc', label: '施工合同已签' },
+      { key: 'is_signed_esc', label: '审价合同已签' },
+      { key: 'is_signed_esr', label: '审价报告已有' },
+      { key: 'need_con', label: '需要施工合同' }
     ]
   },
   {
-    title: '资料相关',
+    title: '表决汇总',
     fields: [
-      { key: 'has_site_photos', label: '现场照片' },
-      { key: 'has_rectification_notice', label: '整改通知' },
-      { key: 'has_completion_report', label: '完工报告' },
-      { key: 'has_acceptance_record', label: '验收记录' },
-      { key: 'has_invoice', label: '发票材料' },
-      { key: 'has_settlement_report', label: '结算材料' },
-      { key: 'has_payment_proof', label: '付款凭证' }
+      { key: 'has_hou_notion_sum', label: '存在表决汇总' },
+      { key: 'count_hou', label: '总户数', type: 'number' },
+      { key: 'agree_hou', label: '同意户数', type: 'number' },
+      { key: 'sum_area', label: '总面积', type: 'number' },
+      { key: 'agree_area', label: '同意面积', type: 'number' },
+      { key: 'request_enddate', label: '征询结束日期 YYYYMMDD', type: 'text' },
+      { key: 'request_startdate', label: '征询开始日期 YYYYMMDD', type: 'text' },
+      { key: 'reg_date', label: '录入日期 YYYYMMDD', type: 'text' }
     ]
   },
   {
-    title: '灰区/应急相关',
+    title: '合同与金额',
     fields: [
-      { key: 'gray_case_evidence_complete', label: '灰区证据完整' },
-      { key: 'has_damage_assessment', label: '损坏评估' },
-      { key: 'is_emergency', label: '紧急维修' },
-      { key: 'has_emergency_proof', label: '应急证明' }
+      { key: 'startup_date', label: '开工日期 YYYYMMDD', type: 'text' },
+      { key: 'orgn_amt', label: '预算金额', type: 'number' },
+      { key: 'contract_amt', label: '合同金额', type: 'number' }
     ]
   }
 ]
 
 const demoCases = [
-  { label: '排除类：小区树木修剪', payload: { project_name: '小区树木修剪' } },
-  { label: '排除类：电梯125%制动试验', payload: { project_name: '电梯125%制动试验' } },
-  { label: '可纳入：电梯主机维修', payload: { project_name: '3号楼电梯主机维修' } },
-  { label: '可纳入：外墙渗漏维修', payload: { project_name: '12号楼外墙渗漏维修' } },
+  { label: '普通维修：电梯主机', payload: { project_name: '3号楼电梯主机维修', property: 1, is_signed_pc: true, is_signed_esc: true, is_signed_esr: true, need_con: true, has_hou_notion_sum: true, count_hou: 100, agree_hou: 80, sum_area: 1000, agree_area: 800, request_enddate: '20240301', orgn_amt: 120000, contract_amt: 118000 } },
+  { label: '紧急维修：外墙脱落', payload: { project_name: '外墙砖脱落应急维修工程', property: 2, is_signed_pc: true, is_signed_esc: true, is_signed_esr: false, need_con: true, orgn_amt: 568770.27, contract_amt: 435000 } },
   {
-    label: '冲突复核：电梯主机+专有',
-    payload: { project_name: '3号楼电梯主机维修', is_private_part: true }
+    label: '专有部分：室内门锁',
+    payload: { project_name: '室内门锁维修', property: 1 }
   },
-  { label: '户内专有：室内门锁维修', payload: { project_name: '室内门锁维修', is_private_part: true } }
+  { label: '资料缺失：消防维修', payload: { project_name: '消防水泵维修工程', property: 1 } }
 ]
 
 const subAuditMeta = [
-  { key: 'scope_audit', title: '使用范围审计' },
-  { key: 'process_audit', title: '流程合规审计' },
-  { key: 'document_completeness_audit', title: '资料完整性审计' },
-  { key: 'timeline_audit', title: '时序合规审计' },
-  { key: 'amount_audit', title: '金额合理性审计' },
-  { key: 'emergency_audit', title: '应急维修审计' }
+  { key: 'entity_audit', title: '专项维修资金使用范围合规性' },
+  { key: 'trace_audit', title: '资料/手续完整性' },
+  { key: 'process_audit', title: '流程合规性' },
+  { key: 'amount_info', title: '金额与造价信息展示' }
 ]
 
 const resultTone = computed(() => {
@@ -113,25 +111,63 @@ const resultTone = computed(() => {
   if (key === 'non_compliant') return 'error'
   if (key === 'manual_review') return 'warning'
   if (key === 'compliant') return 'success'
+  if (key === 'need_supplement') return 'warning'
   return 'processing'
 })
 
 const summaryStatus = computed(() => getTopStatusLabel(result.value?.overall_result, result.value?.display_result))
-const summaryGapText = computed(() => getTopGapText(result.value?.summary_conclusion || {}))
 const summaryReasons = computed(() => getTopReasons(result.value))
-const summaryBasis = computed(() => getBasisList(result.value?.basis_documents || []))
-const isDirectReject = computed(() => isHighFreqDirectReject(result.value?.audit_path || []))
+const summaryBasisView = computed(() =>
+  getTopBasisView(result.value?.all_basis_documents || result.value?.basis_documents || [])
+)
+const summaryBasisVisible = computed(() =>
+  summaryBasisExpanded.value ? summaryBasisView.value.documents : summaryBasisView.value.documents.slice(0, 3)
+)
+const summaryBasisHasMore = computed(() => summaryBasisView.value.documents.length > 3)
 const subAuditViews = computed(() =>
   subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, result.value?.sub_audits?.[meta.key]))
 )
 
 function buildPayload() {
-  const payload = { project_name: String(form.project_name || '').trim() }
-  Object.entries(form).forEach(([key, value]) => {
-    if (key === 'project_name') return
-    if (value === undefined || value === null || value === '') return
-    payload[key] = value
-  })
+  const projectName = String(form.project_name || '').trim()
+  const payload = {
+    project_name: projectName,
+    sources: {
+      t_workspace: {
+        wsname: projectName,
+        property: form.property
+      },
+      blueprint_draft: {
+        wsname: projectName,
+        property: form.property,
+        expirer_remark: form.expirer_remark ?? ''
+      },
+      ws_project: {
+        is_signed_pc: form.is_signed_pc,
+        is_signed_esc: form.is_signed_esc,
+        is_signed_esr: form.is_signed_esr,
+        need_con: form.need_con,
+        orgn_amt: form.orgn_amt
+      },
+      project_contract: {
+        name: projectName,
+        startup_date: form.startup_date || undefined,
+        orgn_amt: form.orgn_amt,
+        contract_amt: form.contract_amt
+      }
+    }
+  }
+  if (form.has_hou_notion_sum) {
+    payload.sources.hou_notion_sum = {
+      count_hou: form.count_hou,
+      agree_hou: form.agree_hou,
+      sum_area: form.sum_area,
+      agree_area: form.agree_area,
+      request_enddate: form.request_enddate || undefined,
+      request_startdate: form.request_startdate || undefined,
+      reg_date: form.reg_date || undefined
+    }
+  }
   return payload
 }
 
@@ -149,6 +185,8 @@ function resetForm() {
     form[key] = key === 'project_name' ? '' : undefined
   })
   result.value = null
+  summaryBasisExpanded.value = false
+  expandedSubBasisKeys.value = []
 }
 
 async function runAudit() {
@@ -161,9 +199,28 @@ async function runAudit() {
   try {
     const data = await judgeAuditEngine(buildPayload())
     result.value = data
+    summaryBasisExpanded.value = false
+    expandedSubBasisKeys.value = []
   } finally {
     loading.value = false
   }
+}
+
+function isSubBasisExpanded(key) {
+  return expandedSubBasisKeys.value.includes(key)
+}
+
+function getVisibleBasisPairs(item) {
+  const pairs = item.basisPairs || []
+  return isSubBasisExpanded(item.key) ? pairs : pairs.slice(0, 2)
+}
+
+function toggleSubBasis(key) {
+  if (isSubBasisExpanded(key)) {
+    expandedSubBasisKeys.value = expandedSubBasisKeys.value.filter((item) => item !== key)
+    return
+  }
+  expandedSubBasisKeys.value = [...expandedSubBasisKeys.value, key]
 }
 </script>
 
@@ -196,7 +253,24 @@ async function runAudit() {
                     <div v-for="field in group.fields" :key="field.key" class="fact-item">
                       <div class="fact-label">{{ field.label }}</div>
                       <div class="fact-key">{{ field.key }}</div>
+                      <a-input
+                        v-if="field.type === 'text'"
+                        v-model:value="form[field.key]"
+                        style="width: 100%"
+                      />
                       <a-select
+                        v-else-if="field.type === 'property'"
+                        v-model:value="form[field.key]"
+                        :options="propertySelectOptions"
+                        style="width: 100%"
+                      />
+                      <a-input-number
+                        v-else-if="field.type === 'number'"
+                        v-model:value="form[field.key]"
+                        style="width: 100%"
+                      />
+                      <a-select
+                        v-else
                         v-model:value="form[field.key]"
                         :options="boolSelectOptions"
                         style="width: 100%"
@@ -222,7 +296,6 @@ async function runAudit() {
           <a-descriptions size="small" bordered :column="1">
             <a-descriptions-item label="项目名称">{{ result.project_name }}</a-descriptions-item>
             <a-descriptions-item label="主结论">{{ summaryStatus }}</a-descriptions-item>
-            <a-descriptions-item label="缺口说明">{{ summaryGapText }}</a-descriptions-item>
             <a-descriptions-item label="原因说明">
               <a-space direction="vertical" size="small">
                 <span v-for="item in summaryReasons" :key="item">{{ item }}</span>
@@ -230,21 +303,26 @@ async function runAudit() {
             </a-descriptions-item>
             <a-descriptions-item label="参考依据">
               <a-space direction="vertical" size="small">
-                <span v-for="doc in summaryBasis" :key="doc">{{ doc }}</span>
+                <div class="basis-section">
+                  <div class="basis-section-title">法规条文</div>
+                  <span v-for="doc in summaryBasisVisible" :key="doc">{{ doc }}</span>
+                  <a-button
+                    v-if="summaryBasisHasMore"
+                    type="link"
+                    size="small"
+                    class="basis-toggle"
+                    @click="summaryBasisExpanded = !summaryBasisExpanded"
+                  >
+                    {{ summaryBasisExpanded ? '收起' : `展开更多（${summaryBasisView.documents.length - 3}）` }}
+                  </a-button>
+                </div>
               </a-space>
             </a-descriptions-item>
           </a-descriptions>
 
           <a-collapse :default-active-key="['subaudits']">
             <a-collapse-panel key="subaudits" header="分项审计结果">
-              <a-alert
-                v-if="isDirectReject"
-                type="info"
-                show-icon
-                class="sub-audit-direct-reject-note"
-                message="该事项已判定为不纳入维修资金，后续审计环节不适用"
-              />
-              <a-space v-else direction="vertical" size="middle" style="width: 100%">
+              <a-space direction="vertical" size="middle" style="width: 100%">
                 <a-card
                   v-for="item in subAuditViews"
                   :key="item.key"
@@ -262,7 +340,30 @@ async function runAudit() {
                     </a-descriptions-item>
                     <a-descriptions-item label="参考依据">
                       <a-space direction="vertical" size="small">
-                        <span v-for="basis in item.basis.slice(0, 2)" :key="`${item.key}-${basis}`">{{ basis }}</span>
+                        <div
+                          v-for="(pair, index) in getVisibleBasisPairs(item)"
+                          :key="`${item.key}-${pair.lawText}-${index}`"
+                          class="basis-pair"
+                        >
+                          <div class="basis-section">
+                            <div class="basis-section-title">法律条文{{ index + 1 }}</div>
+                            <span>{{ pair.lawText }}</span>
+                          </div>
+                          <div class="basis-section">
+                            <div class="basis-section-title">依据说明</div>
+                            <span>{{ pair.basisExplanation }}</span>
+                          </div>
+                        </div>
+                        <a-button
+                          v-if="(item.basisPairs || []).length > 2"
+                          type="link"
+                          size="small"
+                          class="basis-toggle"
+                          @click="toggleSubBasis(item.key)"
+                        >
+                          {{ isSubBasisExpanded(item.key) ? '收起' : `展开更多（${item.basisPairs.length - 2}）` }}
+                        </a-button>
+                        <span v-if="item.key === 'amount_info' && item.basis.length">{{ item.basis[0] }}</span>
                       </a-space>
                     </a-descriptions-item>
                   </a-descriptions>
@@ -337,11 +438,49 @@ async function runAudit() {
   border-left-color: #faad14;
 }
 
-.sub-audit-card--risk {
+.sub-audit-card--review {
+  border-left-color: #fa8c16;
+}
+
+.sub-audit-card--error {
   border-left-color: #ff4d4f;
+}
+
+.sub-audit-card--info {
+  border-left-color: #1677ff;
 }
 
 .sub-audit-card--na {
   border-left-color: #8c8c8c;
+}
+
+.basis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.basis-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.basis-pair + .basis-pair {
+  padding-top: 8px;
+  border-top: 1px dashed #f0f0f0;
+}
+
+.basis-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #667085;
+}
+
+.basis-toggle {
+  height: auto;
+  padding: 0;
+  text-align: left;
 }
 </style>

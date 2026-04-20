@@ -26,6 +26,16 @@ def _registry_sources_for_reason(reason_code: str) -> List[Dict[str, Any]]:
     return sources if isinstance(sources, list) else []
 
 
+def _default_compliant_sources(layer_key: str, repair_nature: Optional[str] = None) -> List[Dict[str, Any]]:
+    registry = load_reason_code_basis_registry()
+    defaults = registry.get("default_compliant_basis", {})
+    sources = defaults.get(layer_key, [])
+    if isinstance(sources, dict):
+        nature_key = str(repair_nature or "normal").strip().lower()
+        sources = sources.get(nature_key, [])
+    return sources if isinstance(sources, list) else []
+
+
 def _normalize_source(source: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "display_name": _none_if_blank(source.get("display_name")),
@@ -35,6 +45,8 @@ def _normalize_source(source: Dict[str, Any]) -> Dict[str, Any]:
         "document_no": _none_if_blank(source.get("document_no")),
         "article": _none_if_blank(source.get("article")),
         "section": _none_if_blank(source.get("section")),
+        "basis_strength": _none_if_blank(source.get("basis_strength")),
+        "basis_explanation": _none_if_blank(source.get("basis_explanation")),
     }
 
 
@@ -61,6 +73,7 @@ def _normalize_fallback_sources(fallback_sources: Optional[Iterable[Any]]) -> Li
 def resolve_basis_documents(
     reason_codes: Sequence[str],
     fallback_sources: Optional[Iterable[Dict[str, Any]]] = None,
+    use_fallback: bool = False,
 ) -> List[Dict[str, Any]]:
     collected: List[Tuple[int, int, Dict[str, Any]]] = []
 
@@ -75,7 +88,7 @@ def resolve_basis_documents(
                 )
             )
 
-    if not collected:
+    if use_fallback and not collected:
         for fallback_index, source in enumerate(_normalize_fallback_sources(fallback_sources)):
             collected.append((1, 10_000 + fallback_index, source))
 
@@ -89,3 +102,11 @@ def resolve_basis_documents(
         deduped.append((priority, order, document))
 
     return [item[2] for item in deduped]
+
+
+def build_from_reason_codes(reason_codes: Sequence[str]) -> List[Dict[str, Any]]:
+    return resolve_basis_documents(reason_codes, use_fallback=False)
+
+
+def build_default_compliant_basis(layer_key: str, repair_nature: Optional[str] = None) -> List[Dict[str, Any]]:
+    return [_normalize_source(source) for source in _default_compliant_sources(layer_key, repair_nature)]
