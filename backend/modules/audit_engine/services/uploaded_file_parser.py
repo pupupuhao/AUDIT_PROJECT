@@ -106,9 +106,13 @@ async def judge_uploaded_files(
                     continue
                 item = {
                     "row_index": row.get("row_index"),
+                    "project_key": row.get("project_key"),
                     "project_name": row.get("project_name") or "",
                     "audit_request": row.get("audit_request") or {},
                     "unmapped_columns": row.get("unmapped_columns") or [],
+                    "source_sheets": row.get("source_sheets") or [],
+                    "business_summary": row.get("business_summary") or [],
+                    "warnings": row.get("warnings") or [],
                     "audit_result": None,
                     "error": None,
                 }

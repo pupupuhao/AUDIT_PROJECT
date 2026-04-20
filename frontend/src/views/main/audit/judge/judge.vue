@@ -288,6 +288,38 @@ function getBatchItemReasons(item) {
 function getBatchSubAuditViews(auditResult) {
   return subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, auditResult?.sub_audits?.[meta.key]))
 }
+
+function getParseModeLabel(mode) {
+  if (mode === 'business_package') return '业务导出包模式'
+  if (mode === 'flat_table') return '扁平表模式'
+  return '文件解析'
+}
+
+function getParsedRowTitle(file, item) {
+  const prefix = file.parse_mode === 'business_package'
+    ? `项目 ${item.row_index}`
+    : `第 ${item.row_index} 行`
+  return `${prefix}：${item.project_name || '未识别项目名称'}`
+}
+
+function getParsedRowDescription(file, item) {
+  if (file.parse_mode === 'business_package') {
+    const parts = []
+    if (item.project_key) parts.push(`项目主键：${item.project_key}`)
+    if ((item.source_sheets || []).length) parts.push(`已聚合表：${item.source_sheets.join('、')}`)
+    if ((item.business_summary || []).length) parts.push(item.business_summary.join('；'))
+    return parts.join(' ｜ ') || '已按业务主键聚合为项目级审计输入'
+  }
+  return `未识别列：${(item.unmapped_columns || []).join('、') || '无'}`
+}
+
+function getJudgedRowHeader(file, item) {
+  const prefix = file.parse_mode === 'business_package'
+    ? `项目 ${item.row_index}`
+    : `第 ${item.row_index} 行`
+  const keyText = item.project_key ? `（${item.project_key}）` : ''
+  return `${prefix}${keyText}：${item.project_name || '未识别项目名称'} ｜ ${getBatchItemStatus(item)}`
+}
 </script>
 
 <template>
@@ -389,9 +421,15 @@ function getBatchSubAuditViews(auditResult) {
                 <a-collapse-panel
                   v-for="(file, fileIndex) in parsedFiles"
                   :key="`${file.filename}-${fileIndex}`"
-                  :header="`${file.filename || '未命名文件'}：${file.status}`"
+                  :header="`${file.filename || '未命名文件'}：${file.status} ｜ ${getParseModeLabel(file.parse_mode)}`"
                 >
                   <a-space direction="vertical" size="small" style="width: 100%">
+                    <a-alert
+                      v-if="(file.business_summary || []).length"
+                      type="success"
+                      show-icon
+                      :message="(file.business_summary || []).join('；')"
+                    />
                     <a-alert
                       v-if="file.status !== 'parsed'"
                       type="warning"
@@ -413,8 +451,8 @@ function getBatchSubAuditViews(auditResult) {
                       <template #renderItem="{ item }">
                         <a-list-item>
                           <a-list-item-meta
-                            :title="`第 ${item.row_index} 行：${item.project_name || '未识别项目名称'}`"
-                            :description="`未识别列：${(item.unmapped_columns || []).join('、') || '无'}`"
+                            :title="getParsedRowTitle(file, item)"
+                            :description="getParsedRowDescription(file, item)"
                           />
                           <a-button
                             size="small"
@@ -438,7 +476,7 @@ function getBatchSubAuditViews(auditResult) {
                 <a-collapse-panel
                   v-for="(file, fileIndex) in judgedFiles"
                   :key="`judged-${file.filename}-${fileIndex}`"
-                  :header="`${file.filename || '未命名文件'}：${file.status}`"
+                  :header="`${file.filename || '未命名文件'}：${file.status} ｜ ${getParseModeLabel(file.parse_mode)}`"
                 >
                   <a-space direction="vertical" size="small" style="width: 100%">
                     <a-alert
@@ -451,7 +489,7 @@ function getBatchSubAuditViews(auditResult) {
                       <a-collapse-panel
                         v-for="item in file.items"
                         :key="`row-${fileIndex}-${item.row_index}`"
-                        :header="`第 ${item.row_index} 行：${item.project_name || '未识别项目名称'} ｜ ${getBatchItemStatus(item)}`"
+                        :header="getJudgedRowHeader(file, item)"
                       >
                         <a-space direction="vertical" size="middle" style="width: 100%">
                           <a-alert
@@ -465,6 +503,12 @@ function getBatchSubAuditViews(auditResult) {
                               <a-descriptions-item label="项目名称">
                                 {{ item.audit_result.project_name }}
                               </a-descriptions-item>
+                              <a-descriptions-item v-if="item.project_key" label="项目主键">
+                                {{ item.project_key }}
+                              </a-descriptions-item>
+                              <a-descriptions-item v-if="(item.source_sheets || []).length" label="已聚合表">
+                                {{ item.source_sheets.join('、') }}
+                              </a-descriptions-item>
                               <a-descriptions-item label="主结论">
                                 {{ getBatchItemStatus(item) }}
                               </a-descriptions-item>
@@ -474,7 +518,7 @@ function getBatchSubAuditViews(auditResult) {
                                 </a-space>
                               </a-descriptions-item>
                               <a-descriptions-item label="未识别列">
-                                {{ (item.unmapped_columns || []).join('、') || '无' }}
+                                {{ (item.unmapped_columns || []).join('、') || '无，仅作为调试信息' }}
                               </a-descriptions-item>
                             </a-descriptions>
                             <a-card

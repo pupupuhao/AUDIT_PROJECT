@@ -4,6 +4,7 @@ from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
+from modules.audit_engine.services.business_excel_package_parser import try_parse_business_package
 from modules.audit_engine.services.excel_row_mapper import map_excel_row_to_audit_request
 
 
@@ -43,19 +44,7 @@ def _build_headers(values: Tuple[Any, ...]) -> Tuple[List[str], List[str]]:
     return headers, warnings
 
 
-def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
-    """Parse one .xlsx file into row-level audit requests.
-
-    Excel is only an input source. This service parses workbook rows and delegates
-    column-to-sources mapping to excel_row_mapper, then the audit pipeline still
-    consumes the standard sources shape.
-    """
-    try:
-        from openpyxl import load_workbook
-    except ImportError as exc:
-        raise RuntimeError("缺少 openpyxl 依赖，无法解析 .xlsx 文件。") from exc
-
-    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+def _parse_flat_table_workbook(workbook: Any, filename: str = "") -> Dict[str, Any]:
     sheet = workbook.worksheets[0]
     warnings: List[str] = []
     rows: List[Dict[str, Any]] = []
@@ -69,6 +58,7 @@ def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
             "filename": filename,
             "file_type": "xlsx",
             "status": "parsed",
+            "parse_mode": "flat_table",
             "sheet_name": sheet.title,
             "rows": [],
             "documents": [],
@@ -90,6 +80,7 @@ def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
         rows.append(
             {
                 "row_index": excel_row_index,
+                "project_key": str(excel_row_index),
                 "project_name": mapped.get("project_name") or "",
                 "raw_row": row,
                 "audit_request": {
@@ -97,16 +88,41 @@ def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
                     "sources": mapped.get("sources") or {},
                 },
                 "unmapped_columns": mapped.get("unmapped_columns") or [],
+                "source_sheets": [sheet.title],
+                "business_summary": ["已按扁平表模式解析；每行作为一个项目审计。"],
             }
         )
 
-    workbook.close()
     return {
         "filename": filename,
         "file_type": "xlsx",
         "status": "parsed",
+        "parse_mode": "flat_table",
         "sheet_name": sheet.title,
         "rows": rows,
         "documents": [],
         "warnings": warnings,
+        "business_summary": ["已按扁平表模式解析；每行作为一个项目审计。"],
     }
+
+
+def parse_xlsx_bytes(content: bytes, filename: str = "") -> Dict[str, Any]:
+    """Parse one .xlsx file into project-level audit requests.
+
+    Business export workbooks are detected and aggregated across sheets first.
+    If a workbook is not a business package, the parser falls back to the flat
+    table mode where each row is treated as one audit project.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise RuntimeError("缺少 openpyxl 依赖，无法解析 .xlsx 文件。") from exc
+
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    try:
+        business_result = try_parse_business_package(workbook, filename=filename)
+        if business_result:
+            return business_result
+        return _parse_flat_table_workbook(workbook, filename=filename)
+    finally:
+        workbook.close()
