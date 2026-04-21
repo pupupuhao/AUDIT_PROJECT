@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Sequence
 
+from modules.audit_engine.core.field_resolver import runtime_values
 from modules.audit_engine.services.basis_resolver import build_default_compliant_basis, build_from_reason_codes
 from modules.audit_engine.services.rule_loader import load_rule_json
 
@@ -482,7 +483,8 @@ def _aggregate(sub_audits: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def audit_project(field_mapping_layer: Dict[str, Any]) -> Dict[str, Any]:
-    fields = dict(field_mapping_layer.get("standard_fields", {}))
+    runtime_standard_fields = dict(field_mapping_layer.get("standard_fields", {}))
+    fields = runtime_values(runtime_standard_fields)
     entity = _audit_entity(fields, field_mapping_layer)
     trace = _audit_trace(fields)
     process = _audit_process(fields, trace)
@@ -502,7 +504,7 @@ def audit_project(field_mapping_layer: Dict[str, Any]) -> Dict[str, Any]:
         "audit_path": ["field_mapping_layer", "entity_audit", "trace_audit", "process_audit", "amount_info"],
         "sub_audits": sub_audits,
         "field_mapping_layer": {
-            "standard_fields": field_mapping_layer.get("standard_fields", {}),
+            "standard_fields": runtime_standard_fields,
             "field_mappings": field_mapping_layer.get("field_mappings", []),
             "unmapped_sources": field_mapping_layer.get("unmapped_sources", []),
             "warnings": field_mapping_layer.get("warnings", []),

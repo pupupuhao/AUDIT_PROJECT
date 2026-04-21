@@ -4,6 +4,7 @@ from fastapi import APIRouter, File, Query, UploadFile
 
 from modules.audit_engine.schemas.audit_engine_schema import AuditRequest, AuditResponse
 from modules.audit_engine.services.audit_pipeline_service import run_audit_pipeline
+from modules.audit_engine.services.standard_field_payload_builder import build_standard_field_payload_from_flat_fields
 from modules.audit_engine.services.uploaded_file_parser import judge_uploaded_files, parse_uploaded_files
 
 
@@ -13,6 +14,8 @@ router = APIRouter(prefix="/engine", tags=["audit-engine"])
 @router.post("/judge", response_model=AuditResponse)
 def audit_engine_judge(req: AuditRequest):
     payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    if not payload.get("standard_fields") and payload.get("flat_fields"):
+        payload = build_standard_field_payload_from_flat_fields(payload)
     return run_audit_pipeline(payload)
 
 

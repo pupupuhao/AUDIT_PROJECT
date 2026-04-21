@@ -3,11 +3,25 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from modules.audit_engine.core.field_resolver import make_candidate, resolve_all_fields
+from modules.audit_engine.services.mapping_service import map_project_name
+from modules.audit_engine.services.rule_loader import load_rule_json
+
 
 BUSINESS_SHEET_TYPES = {
     "维修工程信息": "t_workspace",
+    "T_WORKSPACE": "t_workspace",
+    "T_Workspace": "t_workspace",
     "维修预案": "blueprint_draft",
+    "Blueprint_draft": "blueprint_draft",
     "维修决案": "blueprint",
+    "Blueprint": "blueprint",
+    "三审工程维修项目表": "ws_project",
+    "Ws_project": "ws_project",
+    "WS_PROJECT": "ws_project",
+    "施工合同表": "project_contract",
+    "Project_contract": "project_contract",
+    "项目完工报告表": "ws_project_report",
     "维修工单": "repair_order",
     "维修对象": "repair_object",
     "业主征询意见": "vote_detail",
@@ -21,10 +35,17 @@ TECHNICAL_HEADER_HINTS = KEY_FIELDS | {
     "PROPERTY",
     "ORGN_AMT",
     "FINAL_AMT",
+    "CONTRACT_AMT",
     "COUNT_HOU",
     "AGREE_HOU",
     "SUM_AREA",
     "AGREE_AREA",
+}
+
+
+STANDARD_FIELD_TYPES = {
+    field_key: str(definition.get("type") or "")
+    for field_key, definition in load_rule_json("standard_field_definitions.json").get("fields", {}).items()
 }
 
 
@@ -209,6 +230,170 @@ def _project_name_from_sources(*rows: Dict[str, Any]) -> str:
     return ""
 
 
+FIELD_COLUMN_MAPPINGS: Tuple[Tuple[str, str, str], ...] = (
+    ("project_name", "维修工程信息", "WSNAME"),
+    ("project_name", "维修决案", "WSNAME"),
+    ("project_name", "维修预案", "WSNAME"),
+    ("project_name", "维修对象", "MO_NAME"),
+    ("project_name", "施工合同表", "NAME"),
+    ("project_item_code", "维修工程信息", "WSCODE"),
+    ("project_item_code", "维修决案", "WSCODE"),
+    ("project_item_code", "维修预案", "WSCODE"),
+    ("project_item_code", "维修工程信息", "WSID"),
+    ("property_raw_value", "维修工程信息", "PROPERTY"),
+    ("property_raw_value", "维修决案", "PROPERTY"),
+    ("property_raw_value", "维修预案", "PROPERTY"),
+    ("need_construction_contract", "三审工程维修项目表", "NEED_CON"),
+    ("need_construction_contract", "维修工程信息", "NEED_PRO_CONTRACT"),
+    ("need_construction_contract", "维修决案", "NEED_PRO_CONTRACT"),
+    ("need_construction_contract", "维修预案", "NEED_PRO_CONTRACT"),
+    ("need_cost_review", "维修工程信息", "NEED_CHECK_AMT"),
+    ("need_cost_review", "维修决案", "NEED_CHECK_AMT"),
+    ("need_cost_review", "维修预案", "NEED_CHECK_AMT"),
+    ("has_construction_contract", "三审工程维修项目表", "IS_SIGNED_PC"),
+    ("has_appraisal_contract", "三审工程维修项目表", "IS_SIGNED_ESC"),
+    ("has_appraisal_report", "三审工程维修项目表", "IS_SIGNED_ESR"),
+    ("budget_amount", "三审工程维修项目表", "ORGN_AMT"),
+    ("budget_amount", "维修决案", "ORGN_AMT"),
+    ("budget_amount", "维修预案", "ORGN_AMT"),
+    ("budget_amount", "维修工程信息", "WS_AMT"),
+    ("final_amount", "三审工程维修项目表", "FINAL_AMT"),
+    ("final_amount", "维修决案", "FINAL_AMT"),
+    ("final_amount", "业主表决结果", "FINAL_AMT"),
+    ("contract_amount", "施工合同表", "CONTRACT_AMT"),
+    ("construction_start_date", "施工合同表", "STARTUP_DATE"),
+    ("construction_start_date", "三审工程维修项目表", "STARTUP_DATE"),
+    ("construction_finish_date", "施工合同表", "FINISH_DATE"),
+    ("construction_finish_date", "三审工程维修项目表", "FINISH_DATE"),
+    ("contract_sign_date", "施工合同表", "SIGN_DATE"),
+    ("repair_scope", "维修决案", "RANGE"),
+    ("repair_scope", "维修预案", "RANGE"),
+    ("repair_scope", "三审工程维修项目表", "RANGE"),
+    ("repair_reason", "维修决案", "REASON"),
+    ("repair_reason", "维修预案", "REASON"),
+    ("repair_reason", "维修工单", "REPAIRREASON"),
+    ("vote_total_households", "业主表决汇总", "COUNT_HOU"),
+    ("vote_approved_households", "业主表决汇总", "AGREE_HOU"),
+    ("vote_total_area", "业主表决汇总", "SUM_AREA"),
+    ("vote_approved_area", "业主表决汇总", "AGREE_AREA"),
+    ("vote_date", "业主表决汇总", "REQUEST_ENDDATE"),
+    ("vote_date", "业主大会决议", "发送征求意见表结束日期"),
+    ("vote_date", "业主表决汇总", "REQUEST_STARTDATE"),
+    ("vote_date", "业主大会决议", "发送征求意见表开始日期"),
+    ("vote_date", "业主表决汇总", "REG_DATE"),
+    ("vote_date", "业主大会决议", "决议生成日期"),
+    ("warranty_status", "维修决案", "EXPIRER_REMARK"),
+    ("warranty_status", "维修预案", "EXPIRER_REMARK"),
+)
+
+
+def _field_type(field_key: str) -> str:
+    return STANDARD_FIELD_TYPES.get(field_key, "")
+
+
+def _add_candidate(
+    candidates: Dict[str, List[Any]],
+    field_key: str,
+    *,
+    filename: str,
+    sheet_name: str,
+    column_name: str,
+    value: Any,
+) -> None:
+    if not _present(value):
+        return
+    candidates.setdefault(field_key, []).append(
+        make_candidate(
+            field_type=_field_type(field_key),
+            source_type="excel",
+            source_file=filename,
+            source_sheet=sheet_name,
+            source_column=column_name,
+            raw_value=value,
+        )
+    )
+
+
+def extract_field_candidates(
+    project_rows: Dict[str, List[Dict[str, Any]]],
+    filename: str = "",
+) -> Dict[str, List[Any]]:
+    candidates: Dict[str, List[Any]] = {}
+    for field_key, sheet_name, column_name in FIELD_COLUMN_MAPPINGS:
+        for row in project_rows.get(sheet_name, []):
+            _add_candidate(
+                candidates,
+                field_key,
+                filename=filename,
+                sheet_name=sheet_name,
+                column_name=column_name,
+                value=_row_get(row, column_name),
+            )
+
+    if project_rows.get("业主表决汇总"):
+        _add_candidate(
+            candidates,
+            "has_vote_trace",
+            filename=filename,
+            sheet_name="业主表决汇总",
+            column_name="__row_exists__",
+            value=True,
+        )
+    else:
+        workspace = _first_available(project_rows, "维修工程信息")
+        _add_candidate(
+            candidates,
+            "has_vote_trace",
+            filename=filename,
+            sheet_name="维修工程信息",
+            column_name="IS_VOTED",
+            value=_row_get(workspace, "IS_VOTED"),
+        )
+    return candidates
+
+
+def _build_runtime_project(row_index: int, project_key: str, project_rows: Dict[str, List[Dict[str, Any]]], filename: str) -> Dict[str, Any]:
+    candidates = extract_field_candidates(project_rows, filename=filename)
+    resolved = resolve_all_fields(candidates, catalog_mapper=map_project_name)
+    project_name = str(resolved["standard_fields"].get("project_name", {}).get("value") or "")
+    source_sheets = [sheet_name for sheet_name, rows in project_rows.items() if rows]
+    has_vote_summary = bool(project_rows.get("业主表决汇总"))
+    business_summary = [
+        f"已按 WSID 聚合项目 {project_key}。",
+        f"已聚合 {len(source_sheets)} 张业务表。",
+        "已识别业主表决汇总。" if has_vote_summary else "未识别业主表决汇总。",
+    ]
+    audit_request = {
+        "project_name": project_name,
+        "standard_fields": resolved["standard_fields"],
+        "missing_fields": resolved["missing_fields"],
+        "conflicting_fields": resolved["conflicting_fields"],
+        "warnings": resolved["warnings"],
+        "mapped_objects": resolved["mapped_objects"],
+        "matched_object_ids": resolved["matched_object_ids"],
+    }
+    return {
+        "row_index": row_index,
+        "project_key": project_key,
+        "project_name": project_name,
+        "raw_row": {},
+        "standard_fields": resolved["standard_fields"],
+        "missing_fields": resolved["missing_fields"],
+        "conflicting_fields": resolved["conflicting_fields"],
+        "audit_ready": resolved["audit_ready"],
+        "audit_request": audit_request,
+        "source_sheets": source_sheets,
+        "business_summary": business_summary,
+        "warnings": resolved["warnings"],
+        "mapped_objects": resolved["mapped_objects"],
+        "matched_object_ids": resolved["matched_object_ids"],
+        "debug": {
+            "source_sheets": source_sheets,
+            "unmapped_columns": [],
+        },
+    }
+
+
 def _build_project_request(row_index: int, project_key: str, project_rows: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
     workspace = _first_available(project_rows, "维修工程信息")
     draft = _first_available(project_rows, "维修预案")
@@ -345,7 +530,7 @@ def try_parse_business_package(workbook: Any, filename: str = "") -> Optional[Di
 
     projects = _group_rows_by_project(tables)
     rows = [
-        _build_project_request(index, project_key, project_rows)
+        _build_runtime_project(index, project_key, project_rows, filename)
         for index, (project_key, project_rows) in enumerate(sorted(projects.items()), start=1)
     ]
     warnings: List[str] = []

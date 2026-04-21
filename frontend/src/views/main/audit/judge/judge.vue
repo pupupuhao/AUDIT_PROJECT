@@ -136,46 +136,29 @@ const judgedFiles = computed(() => fileJudgeResult.value?.files || [])
 
 function buildPayload() {
   const projectName = String(form.project_name || '').trim()
-  const payload = {
+  return {
     project_name: projectName,
-    sources: {
-      t_workspace: {
-        wsname: projectName,
-        property: form.property
-      },
-      blueprint_draft: {
-        wsname: projectName,
-        property: form.property,
-        expirer_remark: form.expirer_remark ?? ''
-      },
-      ws_project: {
-        is_signed_pc: form.is_signed_pc,
-        is_signed_esc: form.is_signed_esc,
-        is_signed_esr: form.is_signed_esr,
-        need_con: form.need_con,
-        orgn_amt: form.orgn_amt
-      },
-      project_contract: {
-        name: projectName,
-        startup_date: form.startup_date || undefined,
-        orgn_amt: form.orgn_amt,
-        contract_amt: form.contract_amt
-      }
-    }
-  }
-  if (form.has_hou_notion_sum) {
-    payload.sources.hou_notion_sum = {
-      __row_exists__: true,
+    flat_fields: {
+      project_name: projectName,
+      property: form.property,
+      expirer_remark: form.expirer_remark ?? '',
+      is_signed_pc: form.is_signed_pc,
+      is_signed_esc: form.is_signed_esc,
+      is_signed_esr: form.is_signed_esr,
+      need_con: form.need_con,
+      has_hou_notion_sum: form.has_hou_notion_sum,
       count_hou: form.count_hou,
       agree_hou: form.agree_hou,
       sum_area: form.sum_area,
       agree_area: form.agree_area,
       request_enddate: form.request_enddate || undefined,
       request_startdate: form.request_startdate || undefined,
-      reg_date: form.reg_date || undefined
+      reg_date: form.reg_date || undefined,
+      startup_date: form.startup_date || undefined,
+      orgn_amt: form.orgn_amt,
+      contract_amt: form.contract_amt
     }
   }
-  return payload
 }
 
 function fillDemoCase(demo) {

@@ -4,8 +4,10 @@ from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
+from modules.audit_engine.core.field_resolver import resolve_all_fields
+from modules.audit_engine.services.mapping_service import map_project_name
 from modules.audit_engine.services.business_excel_package_parser import try_parse_business_package
-from modules.audit_engine.services.excel_row_mapper import map_excel_row_to_audit_request
+from modules.audit_engine.services.excel_row_mapper import map_excel_row_to_field_candidates
 
 
 def _cell_value(value: Any) -> Any:
@@ -76,20 +78,38 @@ def _parse_flat_table_workbook(workbook: Any, filename: str = "") -> Dict[str, A
         if not any(_is_present(value) for value in row.values()):
             continue
 
-        mapped = map_excel_row_to_audit_request(row)
+        mapped = map_excel_row_to_field_candidates(row, filename=filename, sheet_name=sheet.title)
+        resolved = resolve_all_fields(mapped.get("field_candidates") or {}, catalog_mapper=map_project_name)
+        project_name = str(resolved["standard_fields"].get("project_name", {}).get("value") or "")
+        audit_request = {
+            "project_name": project_name,
+            "standard_fields": resolved["standard_fields"],
+            "missing_fields": resolved["missing_fields"],
+            "conflicting_fields": resolved["conflicting_fields"],
+            "warnings": resolved["warnings"],
+            "mapped_objects": resolved["mapped_objects"],
+            "matched_object_ids": resolved["matched_object_ids"],
+        }
         rows.append(
             {
                 "row_index": excel_row_index,
                 "project_key": str(excel_row_index),
-                "project_name": mapped.get("project_name") or "",
+                "project_name": project_name,
                 "raw_row": row,
-                "audit_request": {
-                    "project_name": mapped.get("project_name") or "",
-                    "sources": mapped.get("sources") or {},
-                },
-                "unmapped_columns": mapped.get("unmapped_columns") or [],
+                "standard_fields": resolved["standard_fields"],
+                "missing_fields": resolved["missing_fields"],
+                "conflicting_fields": resolved["conflicting_fields"],
+                "audit_ready": resolved["audit_ready"],
+                "audit_request": audit_request,
                 "source_sheets": [sheet.title],
                 "business_summary": ["已按扁平表模式解析；每行作为一个项目审计。"],
+                "warnings": resolved["warnings"],
+                "mapped_objects": resolved["mapped_objects"],
+                "matched_object_ids": resolved["matched_object_ids"],
+                "debug": {
+                    "source_sheets": [sheet.title],
+                    "unmapped_columns": mapped.get("unmapped_columns") or [],
+                },
             }
         )
 
