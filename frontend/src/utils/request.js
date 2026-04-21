@@ -10,7 +10,12 @@ export default (config) => {
 
   instance.interceptors.request.use((config) => {
     userStore().isLoading = !userStore().isLoading
-    config.headers.Authorization = userStore().accessToken
+    const token = userStore().accessToken
+    if (token) {
+      config.headers.Authorization = token
+    } else if (config.headers?.Authorization) {
+      delete config.headers.Authorization
+    }
     return config
   })
 

@@ -20,10 +20,19 @@ export const userStore = defineStore(
 
     const isPush = ref(false)
 
+    const normalizeToken = (value) => {
+      const raw = String(value || '').trim()
+      if (!raw) return ''
+      return raw.replace(/^Bearer\s+/i, '')
+    }
+
     const getActiveRole = (roles = []) => roles.find((role) => role.status === 5) || roles[0] || null
 
     // getter
-    const accessToken = computed(() => 'Bearer ' + token.value)
+    const accessToken = computed(() => {
+      const normalized = normalizeToken(token.value)
+      return normalized ? `Bearer ${normalized}` : ''
+    })
 
     // setup store 不提供$reset 需要自己重置
     // https://github.com/vuejs/pinia/issues/1056
@@ -75,7 +84,7 @@ export const userStore = defineStore(
     const loginAction = async (data) => {
       // 1. 登录
       const res = await login(data)
-      token.value = res.data.token
+      token.value = normalizeToken(res.data.token)
       await getUserData(res.data.id)
       // 弹框提示登录成功
       message.success('登录成功.')

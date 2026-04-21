@@ -199,27 +199,27 @@ class PgVectorStore:
             payload["law_name"] = law_name
 
         where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
-        count_sql = f"SELECT COUNT(*) FROM {NEW_RULE_TABLE} {where_sql}"
+        count_sql = f"SELECT COUNT(*) FROM {NEW_RULE_VECTOR_TABLE} {where_sql}"
         list_sql = f"""
         SELECT
-            id, doc_id, parent_id, law_name, node_level, node_type,
+            rule_id, doc_id, parent_id, law_name, node_level, node_type,
             clause_label, item_label, subitem_label, sub_clause,
             full_title, title_text, content, clean_text, embedding_text,
-            parent_context, path, rule_index, category, logic_rules
-        FROM {NEW_RULE_TABLE}
+            parent_context, path, category, logic_rules
+        FROM {NEW_RULE_VECTOR_TABLE}
         {where_sql}
-        ORDER BY id ASC
+        ORDER BY rule_id ASC
         OFFSET %(offset)s
         LIMIT %(limit)s
         """
         categories_sql = f"""
         SELECT DISTINCT category
-        FROM {NEW_RULE_TABLE}
+        FROM {NEW_RULE_VECTOR_TABLE}
         WHERE category IS NOT NULL AND category != ''
         ORDER BY category ASC
         """
-        law_count_sql = f"SELECT COUNT(DISTINCT law_name) FROM {NEW_RULE_TABLE} {where_sql}"
-        latest_updated_sql = f"SELECT MAX(updated_at) FROM {NEW_RULE_TABLE} {where_sql}"
+        law_count_sql = f"SELECT COUNT(DISTINCT law_name) FROM {NEW_RULE_VECTOR_TABLE} {where_sql}"
+        latest_updated_sql = f"SELECT MAX(updated_at) FROM {NEW_RULE_VECTOR_TABLE} {where_sql}"
 
         with self._connect() as conn:
             with conn.cursor() as cur:
@@ -255,9 +255,9 @@ class PgVectorStore:
                     "embedding_text": row[14] or "",
                     "parent_context": row[15] or "",
                     "path": row[16] or [],
-                    "index": row[17],
-                    "category": row[18] or "",
-                    "logic_rules": row[19] or {},
+                    "index": None,
+                    "category": row[17] or "",
+                    "logic_rules": row[18] or {},
                 }
             )
 
@@ -272,12 +272,12 @@ class PgVectorStore:
     def get_new_pure_rule(self, rule_id: str) -> Optional[Dict[str, Any]]:
         sql = f"""
         SELECT
-            id, doc_id, parent_id, law_name, node_level, node_type,
+            rule_id, doc_id, parent_id, law_name, node_level, node_type,
             clause_label, item_label, subitem_label, sub_clause,
             full_title, title_text, content, clean_text, embedding_text,
-            parent_context, path, rule_index, category, logic_rules
-        FROM {NEW_RULE_TABLE}
-        WHERE id = %(rule_id)s
+            parent_context, path, category, logic_rules
+        FROM {NEW_RULE_VECTOR_TABLE}
+        WHERE rule_id = %(rule_id)s
         LIMIT 1
         """
         with self._connect() as conn:
@@ -304,9 +304,9 @@ class PgVectorStore:
             "embedding_text": row[14] or "",
             "parent_context": row[15] or "",
             "path": row[16] or [],
-            "index": row[17],
-            "category": row[18] or "",
-            "logic_rules": row[19] or {},
+            "index": None,
+            "category": row[17] or "",
+            "logic_rules": row[18] or {},
         }
 
     def count_new_pure_rules_by_law_names(self, law_names: List[str]) -> Dict[str, int]:
@@ -315,7 +315,7 @@ class PgVectorStore:
             return {}
         sql = f"""
         SELECT law_name, COUNT(*)
-        FROM {NEW_RULE_TABLE}
+        FROM {NEW_RULE_VECTOR_TABLE}
         WHERE law_name = ANY(%(law_names)s)
         GROUP BY law_name
         """

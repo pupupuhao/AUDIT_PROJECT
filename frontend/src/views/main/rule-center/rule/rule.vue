@@ -12,7 +12,12 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 
-import { addComplianceRule, delComplianceRule, getComplianceRules, putComplianceRule } from '@/service/compliance-rule'
+import {
+  addComplianceRule,
+  delComplianceRule,
+  getComplianceRules,
+  putComplianceRule
+} from '@/service/compliance-rule'
 import { getLawDocs, queryLawClauses } from '@/service/law'
 
 const loading = ref(false)
@@ -665,9 +670,6 @@ onMounted(async () => {
               <div class="detail-title">{{ selectedRule.full_title || selectedRule.clause_label }}</div>
             </div>
             <a-space>
-              <div class="category-badge" :class="`category-badge--${getCategoryTone(selectedRule.category)}`">
-                {{ selectedRule.category }}
-              </div>
               <a-button
                 v-per="'compliance:rule:update'"
                 class="page-action-button"
@@ -678,7 +680,7 @@ onMounted(async () => {
               </a-button>
             </a-space>
           </div>
-      <div class="detail-meta">
+          <div class="detail-meta">
             <div><strong>所属法规：</strong>{{ selectedRule.law_name }}</div>
             <div><strong>条款位置：</strong>{{ selectedRule.clause_label || '-' }}</div>
             <div><strong>层级路径：</strong>{{ (selectedRule.path || []).join(' / ') || '-' }}</div>
@@ -1231,55 +1233,6 @@ onMounted(async () => {
   color: #1677ff;
   font-size: 12px;
   font-weight: 700;
-}
-
-.category-badge {
-  flex: 0 0 auto;
-  max-width: 180px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.5;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.category-badge--slate {
-  color: #445066;
-  background: #f3f5f8;
-  border-color: #e2e8f0;
-}
-
-.category-badge--blue {
-  color: #215ea6;
-  background: #edf4ff;
-  border-color: #cdddff;
-}
-
-.category-badge--green {
-  color: #21674b;
-  background: #eefaf3;
-  border-color: #caecd9;
-}
-
-.category-badge--gold {
-  color: #8a5a12;
-  background: #fff6e8;
-  border-color: #f3ddba;
-}
-
-.category-badge--rose {
-  color: #9a435e;
-  background: #fff1f5;
-  border-color: #f3cfda;
-}
-
-.category-badge--purple {
-  color: #6f4aa3;
-  background: #f5f1ff;
-  border-color: #ddd1ff;
 }
 
 .detail-meta {
