@@ -11,15 +11,12 @@ from modules.compliance_center.schemas.rule_model import RetrievalResult, RuleMo
 
 
 BASE_DIR = Path(__file__).resolve().parents[3]
-RAW_LAW_PATH = BASE_DIR / "data" / "raw" / "law_policy.md"
 RULE_PATHS = [
-    BASE_DIR / "data" / "rules" / "rules_db_with_llm.json",
+    BASE_DIR / "data" / "rules" / "rules_db_new_pure_with_logic.json",
+    # BASE_DIR / "data" / "rules" / "rules_db_with_llm.json",
     BASE_DIR / "data" / "chunks" / "rules_db_with_category.json",
-    BASE_DIR / "data" / "chunks" / "rules_db.json",
+    # BASE_DIR / "data" / "chunks" / "rules_db.json",
 ]
-CATEGORY_ALIASES = {
-    "使用范围审计": "使用范围合规审计",
-}
 TOKEN_PATTERN = re.compile(r"[\u4e00-\u9fa5]{2,}|[a-zA-Z0-9_]+")
 
 
@@ -27,41 +24,42 @@ def _resolve_rule_file() -> Path:
     for path in RULE_PATHS:
         if path.exists():
             return path
-    raise FileNotFoundError("未找到规则库文件，请先执行 backend/script/build_rules.py")
+    raise FileNotFoundError("未找到规则库文件，请先执行规则构建脚本")
 
 
 def _normalize_rule(raw: dict) -> dict:
     logic = raw.get("logic_rules") or {}
-    content = raw.get("content") or raw.get("clean_text") or ""
-    category = raw.get("category", "使用范围合规审计")
+    content = raw.get("content") or raw.get("display_text") or raw.get("clean_text") or ""
+    clean_text = raw.get("clean_text") or raw.get("embedding_text") or content
     return {
         "id": raw.get("id", ""),
+        "doc_id": raw.get("doc_id", ""),
+        "parent_id": raw.get("parent_id"),
         "law_name": raw.get("law_name", ""),
+        "node_level": raw.get("node_level"),
+        "node_type": raw.get("node_type", ""),
         "clause_label": raw.get("clause_label", ""),
-        "full_title": raw.get("full_title", ""),
-        "content": content,
-        "clean_text": raw.get("clean_text", content),
-        "parent_context": raw.get("parent_context", ""),
-        "keywords": raw.get("keywords") or [],
+        "item_label": raw.get("item_label", ""),
+        "subitem_label": raw.get("subitem_label", ""),
         "sub_clause": raw.get("sub_clause", ""),
+        "full_title": raw.get("full_title", ""),
+        "title_text": raw.get("title_text", ""),
+        "content": content,
+        "clean_text": clean_text,
+        "embedding_text": raw.get("embedding_text", clean_text),
+        "parent_context": raw.get("parent_context", ""),
+        "path": raw.get("path") or [],
         "index": raw.get("index"),
-        "logic_rules": {
-            "action": logic.get("action", ""),
-            "target": logic.get("target") or [],
-            "condition": logic.get("condition") or [],
-            "forbidden": logic.get("forbidden") or [],
-            "required_docs": logic.get("required_docs") or raw.get("required_docs") or [],
-            "responsibility": logic.get("responsibility", ""),
-        },
-        "category": CATEGORY_ALIASES.get(category, category),
+        "logic_rules": logic,
+        "category": raw.get("category", ""),
     }
 
 
 @lru_cache(maxsize=1)
 def load_rules() -> List[RuleModel]:
     rule_file = _resolve_rule_file()
-    with rule_file.open("r", encoding="utf-8") as f:
-        payload = json.load(f)
+    with rule_file.open("r", encoding="utf-8") as file:
+        payload = json.load(file)
     return [RuleModel(**_normalize_rule(item)) for item in payload]
 
 
@@ -88,17 +86,22 @@ def _text_blob(rule: RuleModel) -> str:
     parts: List[str] = [
         rule.law_name,
         rule.clause_label,
+        rule.item_label,
+        rule.subitem_label,
         rule.full_title,
+        rule.title_text,
         rule.content,
         rule.clean_text,
+        rule.embedding_text,
         rule.parent_context,
         rule.category,
-        " ".join(rule.keywords),
-        " ".join(logic.target),
-        " ".join(logic.condition),
-        " ".join(logic.forbidden),
-        str(logic.responsibility),
-        logic.action,
+        logic.rule_nature,
+        logic.audit_stage,
+        logic.audit_dimension,
+        logic.judgement_mode,
+        " ".join(logic.required_fields),
+        " ".join(logic.required_documents),
+        " ".join(logic.risk_points),
     ]
     return " ".join(part for part in parts if part)
 
@@ -127,30 +130,27 @@ def _score_rule(query: str, query_tokens: List[str], rule: RuleModel) -> Retriev
     cosine = dot / (q_norm * r_norm) if q_norm and r_norm else 0.0
 
     query_token_set = set(query_tokens)
-    keyword_hits = _keyword_overlap(query_token_set, rule.keywords)
-    target_hits = _keyword_overlap(query_token_set, rule.logic_rules.target)
-    forbidden_hits = _keyword_overlap(query_token_set, rule.logic_rules.forbidden)
-    condition_hits = _keyword_overlap(query_token_set, rule.logic_rules.condition)
+    field_hits = _keyword_overlap(query_token_set, rule.logic_rules.required_fields)
+    doc_hits = _keyword_overlap(query_token_set, rule.logic_rules.required_documents)
+    risk_hits = _keyword_overlap(query_token_set, rule.logic_rules.risk_points)
 
     exact_bonus = 0.0
-    if any(keyword and keyword in query for keyword in rule.keywords):
+    if rule.full_title and rule.full_title in query:
         exact_bonus += 0.25
-    if any(item and item in query for item in rule.logic_rules.forbidden):
-        exact_bonus += 0.3
-    if any(item and item in query for item in rule.logic_rules.target):
+    if any(item and item in query for item in rule.logic_rules.required_fields):
         exact_bonus += 0.2
+    if any(item and item in query for item in rule.logic_rules.required_documents):
+        exact_bonus += 0.15
 
-    score = cosine + exact_bonus + 0.08 * len(keyword_hits) + 0.1 * len(target_hits) + 0.12 * len(forbidden_hits)
+    score = cosine + exact_bonus + 0.1 * len(field_hits) + 0.08 * len(doc_hits) + 0.08 * len(risk_hits)
 
     reasons: List[str] = []
-    if keyword_hits:
-        reasons.append(f"命中关键词: {', '.join(keyword_hits)}")
-    if target_hits:
-        reasons.append(f"命中适用对象: {', '.join(target_hits)}")
-    if forbidden_hits:
-        reasons.append(f"命中禁止事项: {', '.join(forbidden_hits)}")
-    if condition_hits:
-        reasons.append(f"命中触发条件: {', '.join(condition_hits)}")
+    if field_hits:
+        reasons.append(f"命中字段要求: {', '.join(field_hits)}")
+    if doc_hits:
+        reasons.append(f"命中资料要求: {', '.join(doc_hits)}")
+    if risk_hits:
+        reasons.append(f"命中风险点: {', '.join(risk_hits)}")
     if not reasons and score > 0:
         reasons.append("文本语义相近")
 
@@ -165,24 +165,13 @@ def search_rules(query: str, top_k: int = 5) -> List[RetrievalResult]:
     store = get_pgvector_store()
     if store:
         try:
-            db_results = store.search_rules(query, top_k=top_k)
+            db_results = store.search_new_pure_rules(query, top_k=top_k)
             if db_results:
                 return [
                     RetrievalResult(
-                        rule=RuleModel(
-                            id=item.get("id", ""),
-                            law_name=item.get("law_name", ""),
-                            clause_label=item.get("clause_label", ""),
-                            full_title=item.get("full_title", ""),
-                            content=item.get("content", ""),
-                            clean_text=item.get("content", ""),
-                            parent_context=item.get("content", ""),
-                            keywords=item.get("keywords", []),
-                            logic_rules=item.get("logic_rules", {}),
-                            category=item.get("category", "使用范围合规审计"),
-                        ),
+                        rule=RuleModel(**_normalize_rule(item)),
                         score=round(item.get("score", 0), 4),
-                        match_reasons=["pgvector 语义召回"],
+                        match_reasons=["rule_db_new_pure_vector 语义召回"],
                     )
                     for item in db_results
                 ]
@@ -204,7 +193,7 @@ def list_rules_from_store(
     store = get_pgvector_store()
     if store:
         try:
-            return store.list_rules(
+            return store.list_new_pure_rules(
                 offset=offset,
                 limit=limit,
                 keyword=keyword,
@@ -235,7 +224,7 @@ def list_rules_from_store(
     return {
         "total": len(rules),
         "items": [rule.model_dump() for rule in rules[start:end]],
-        "categories": sorted({rule.category for rule in load_rules()}),
+        "categories": sorted({rule.category for rule in load_rules() if rule.category}),
         "law_count": len({rule.law_name for rule in rules if rule.law_name}),
         "latest_updated_at": None,
     }
@@ -245,7 +234,7 @@ def count_rules_by_law_names(law_names: list[str]) -> dict[str, int]:
     store = get_pgvector_store()
     if store:
         try:
-            return store.count_rules_by_law_names(law_names)
+            return store.count_new_pure_rules_by_law_names(law_names)
         except Exception:
             pass
 
@@ -261,7 +250,7 @@ def get_rule_by_id_from_store(rule_id: str) -> dict | None:
     store = get_pgvector_store()
     if store:
         try:
-            rule = store.get_rule(rule_id)
+            rule = store.get_new_pure_rule(rule_id)
             if rule:
                 return rule
         except Exception:
@@ -274,16 +263,11 @@ def get_rule_by_id_from_store(rule_id: str) -> dict | None:
 def upsert_rule_in_store(payload: dict) -> dict:
     store = get_pgvector_store()
     if not store:
-        raise RuntimeError("pgvector 未启用，无法维护规则库")
+        raise RuntimeError("pgvector 未启用，无法维护新规则库")
 
     normalized = _normalize_rule(payload)
     normalized["id"] = payload.get("id", normalized["id"])
-    normalized["logic_rules"]["required_docs"] = (
-        payload.get("logic_rules", {}).get("required_docs")
-        or normalized["logic_rules"].get("required_docs")
-        or []
-    )
-    store.upsert_rule(normalized)
+    store.upsert_new_pure_rule(normalized)
     refresh_rules()
     return get_rule_by_id_from_store(normalized["id"]) or RuleModel(**normalized).model_dump()
 
@@ -291,118 +275,8 @@ def upsert_rule_in_store(payload: dict) -> dict:
 def delete_rule_in_store(rule_id: str) -> bool:
     store = get_pgvector_store()
     if not store:
-        raise RuntimeError("pgvector 未启用，无法维护规则库")
+        raise RuntimeError("pgvector 未启用，无法维护新规则库")
 
-    deleted = store.delete_rule(rule_id)
+    deleted = store.delete_new_pure_rule(rule_id)
     refresh_rules()
     return deleted > 0
-
-
-def _parse_law_documents(markdown: str) -> list[dict]:
-    documents: list[dict] = []
-    current_doc: dict | None = None
-    current_section: dict | None = None
-
-    for raw_line in markdown.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        if line.startswith("## "):
-            if current_section and current_doc is not None:
-                current_doc["sections"].append(current_section)
-            if current_doc is not None:
-                documents.append(current_doc)
-
-            title = line[3:].strip()
-            current_doc = {
-                "id": f"LAW_{len(documents) + 1:03d}",
-                "title": title,
-                "doc_type": _infer_law_type(title),
-                "sections": [],
-                "content": "",
-            }
-            current_section = None
-            continue
-
-        if line.startswith("### "):
-            if current_doc is None:
-                continue
-            if current_section is not None:
-                current_doc["sections"].append(current_section)
-
-            heading = line[4:].strip()
-            current_section = {
-                "title": heading,
-                "content": "",
-            }
-            continue
-
-        if current_doc is None:
-            continue
-
-        if current_section is None:
-            current_section = {
-                "title": "正文",
-                "content": line,
-            }
-        else:
-            current_section["content"] = (
-                f"{current_section['content']}\n{line}".strip()
-                if current_section["content"]
-                else line
-            )
-
-    if current_section and current_doc is not None:
-        current_doc["sections"].append(current_section)
-    if current_doc is not None:
-        documents.append(current_doc)
-
-    for doc in documents:
-        doc["section_count"] = len(doc["sections"])
-        doc["content"] = "\n\n".join(
-            [f"{section['title']}\n{section['content']}".strip() for section in doc["sections"]]
-        )
-        doc["rule_count"] = 0
-
-    return documents
-
-
-def _infer_law_type(title: str) -> str:
-    mapping = {
-        "管理办法": "管理办法",
-        "通知": "通知",
-        "意见": "意见",
-        "规定": "规定",
-        "民法典": "法律",
-        "工作意见": "工作意见",
-    }
-    for key, value in mapping.items():
-        if key in title:
-            return value
-    return "法规文件"
-
-
-@lru_cache(maxsize=1)
-def load_law_documents() -> list[dict]:
-    if not RAW_LAW_PATH.exists():
-        return []
-
-    documents = _parse_law_documents(RAW_LAW_PATH.read_text(encoding="utf-8"))
-    rule_counter: dict[str, int] = {}
-    for rule in load_rules():
-        rule_counter[rule.law_name] = rule_counter.get(rule.law_name, 0) + 1
-
-    for doc in documents:
-        normalized_title = re.sub(r"\s+", "", doc["title"])
-        for law_name, count in rule_counter.items():
-            if normalized_title and normalized_title in re.sub(r"\s+", "", law_name):
-                doc["rule_count"] = count
-                break
-
-    return documents
-
-
-def refresh_law_documents() -> list[dict]:
-    load_law_documents.cache_clear()
-    return load_law_documents()

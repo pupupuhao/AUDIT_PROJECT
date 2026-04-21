@@ -1,6 +1,15 @@
 <script setup>
 import { computed, createVNode, onMounted, reactive, ref } from 'vue'
-import { DownOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import {
+  ClockCircleOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
+  FileTextOutlined,
+  FilterOutlined,
+  SafetyCertificateOutlined
+} from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 
 import { addComplianceRule, delComplianceRule, getComplianceRules, putComplianceRule } from '@/service/compliance-rule'
@@ -32,13 +41,20 @@ const form = reactive({
   full_title: '',
   content: '',
   category: '',
-  keywordsText: '',
-  action: '',
-  targetText: '',
-  conditionText: '',
-  forbiddenText: '',
-  requiredDocsText: '',
-  responsibility: ''
+  ruleNature: '',
+  auditStage: '',
+  auditDimension: '',
+  judgementMode: '',
+  projectTypesText: '',
+  repairModesText: '',
+  applicableObjectsText: '',
+  requiredFieldsText: '',
+  requiredDocumentsText: '',
+  fieldExpectationsText: '[]',
+  riskPointsText: '',
+  conclusionType: '',
+  riskLevel: '',
+  messageTemplate: ''
 })
 
 const pagination = reactive({
@@ -82,7 +98,7 @@ const columns = [
   {
     title: '操作',
     key: 'action',
-    width: 180
+    width: 120
   }
 ]
 
@@ -96,10 +112,31 @@ const presetCategories = [
 ]
 
 const stats = computed(() => [
-  { label: '规则总数', value: pagination.total },
-  { label: '命中法规数', value: lawCount.value },
-  { label: '最近更新时间', value: latestUpdatedAt.value || '暂无' }
+  { label: '规则总数', value: pagination.total, tone: 'blue', icon: FileTextOutlined },
+  { label: '命中法规数', value: lawCount.value, tone: 'gold', icon: SafetyCertificateOutlined },
+  { label: '最近更新时间', value: latestUpdatedAt.value || '暂无', tone: 'slate', icon: ClockCircleOutlined, compact: true }
 ])
+
+const detailLogicItems = computed(() => {
+  if (!selectedRule.value) return []
+
+  return [
+    { label: '规则性质', value: selectedRule.value.logic_rules?.rule_nature || '-' , half: true},
+    { label: '审计阶段', value: selectedRule.value.logic_rules?.audit_stage || '-', half: true },
+    { label: '审计维度', value: selectedRule.value.logic_rules?.audit_dimension || '-', half: true },
+    { label: '判定方式', value: selectedRule.value.logic_rules?.judgement_mode || '-', half: true },
+    { label: '项目类型', value: formatLineList(selectedRule.value.logic_rules?.apply_scope?.project_types), half: true },
+    { label: '维修模式', value: formatLineList(selectedRule.value.logic_rules?.apply_scope?.repair_modes), half: true },
+    { label: '适用对象', value: formatLineList(selectedRule.value.logic_rules?.apply_scope?.applicable_objects) },
+    { label: '所需字段', value: formatLineList(selectedRule.value.logic_rules?.required_fields) },
+    { label: '所需材料', value: formatLineList(selectedRule.value.logic_rules?.required_documents) },
+    { label: '风险点', value: formatLineList(selectedRule.value.logic_rules?.risk_points) },
+    { label: '输出结论', value: selectedRule.value.logic_rules?.output_hint?.conclusion_type || '-', half: true },
+    { label: '风险等级', value: selectedRule.value.logic_rules?.output_hint?.risk_level || '-', half: true },
+    { label: '输出模板', value: selectedRule.value.logic_rules?.output_hint?.message_template || '-' },
+    { label: '字段判定', value: formatFieldExpectations(selectedRule.value.logic_rules?.field_expectations) }
+  ]
+})
 
 const categoryToneMap = {
   使用范围合规审计: 'slate',
@@ -173,6 +210,40 @@ function splitLines(value) {
     .filter(Boolean)
 }
 
+function formatLineList(value) {
+  if (!Array.isArray(value) || !value.length) return '-'
+  return value.join('，')
+}
+
+function formatFieldExpectations(value) {
+  if (!Array.isArray(value) || !value.length) return '-'
+  return value
+    .map((item) => {
+      const field = item?.field || ''
+      const operator = item?.operator || ''
+      const rawValue = item?.value
+      const renderedValue = Array.isArray(rawValue)
+        ? rawValue.join(' / ')
+        : rawValue === null || rawValue === undefined
+          ? 'null'
+          : String(rawValue)
+      const message = item?.message ? `（${item.message}）` : ''
+      return `${field} ${operator} ${renderedValue}${message}`
+    })
+    .join('；')
+}
+
+function parseJsonArray(value) {
+  const text = String(value || '').trim()
+  if (!text) return []
+  try {
+    const parsed = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function fillForm(rule) {
   form.id = rule?.id || ''
   form.sourceLawName = rule?.law_name || undefined
@@ -182,13 +253,20 @@ function fillForm(rule) {
   form.full_title = rule?.full_title || ''
   form.content = rule?.content || ''
   form.category = rule?.category || categories.value[0] || ''
-  form.keywordsText = (rule?.keywords || []).join('\n')
-  form.action = rule?.logic_rules?.action || ''
-  form.targetText = (rule?.logic_rules?.target || []).join('\n')
-  form.conditionText = (rule?.logic_rules?.condition || []).join('\n')
-  form.forbiddenText = (rule?.logic_rules?.forbidden || []).join('\n')
-  form.requiredDocsText = (rule?.logic_rules?.required_docs || rule?.required_docs || []).join('\n')
-  form.responsibility = rule?.logic_rules?.responsibility || ''
+  form.ruleNature = rule?.logic_rules?.rule_nature || ''
+  form.auditStage = rule?.logic_rules?.audit_stage || ''
+  form.auditDimension = rule?.logic_rules?.audit_dimension || ''
+  form.judgementMode = rule?.logic_rules?.judgement_mode || ''
+  form.projectTypesText = (rule?.logic_rules?.apply_scope?.project_types || []).join('\n')
+  form.repairModesText = (rule?.logic_rules?.apply_scope?.repair_modes || []).join('\n')
+  form.applicableObjectsText = (rule?.logic_rules?.apply_scope?.applicable_objects || []).join('\n')
+  form.requiredFieldsText = (rule?.logic_rules?.required_fields || []).join('\n')
+  form.requiredDocumentsText = (rule?.logic_rules?.required_documents || []).join('\n')
+  form.fieldExpectationsText = JSON.stringify(rule?.logic_rules?.field_expectations || [], null, 2)
+  form.riskPointsText = (rule?.logic_rules?.risk_points || []).join('\n')
+  form.conclusionType = rule?.logic_rules?.output_hint?.conclusion_type || ''
+  form.riskLevel = rule?.logic_rules?.output_hint?.risk_level || ''
+  form.messageTemplate = rule?.logic_rules?.output_hint?.message_template || ''
 }
 
 function autoFillFromClause(clause) {
@@ -199,14 +277,6 @@ function autoFillFromClause(clause) {
   form.clause_label = clause.clause_label || ''
   form.full_title = clause.full_title || ''
   form.content = clause.content || ''
-  if (!form.keywordsText.trim()) {
-    form.keywordsText = String(clause.content || '')
-      .split(/[\s，。；、]/)
-      .map((item) => item.trim())
-      .filter((item) => item.length >= 2)
-      .slice(0, 6)
-      .join('\n')
-  }
 }
 
 async function loadLawOptions() {
@@ -240,7 +310,6 @@ async function onSourceLawChange(lawName) {
   form.clause_label = ''
   form.full_title = ''
   form.content = ''
-  form.keywordsText = ''
   await loadClauseOptions(lawName)
 }
 
@@ -257,14 +326,25 @@ function buildPayload() {
     full_title: form.full_title.trim(),
     content: form.content.trim(),
     category: form.category,
-    keywords: splitLines(form.keywordsText),
     logic_rules: {
-      action: form.action.trim(),
-      target: splitLines(form.targetText),
-      condition: splitLines(form.conditionText),
-      forbidden: splitLines(form.forbiddenText),
-      required_docs: splitLines(form.requiredDocsText),
-      responsibility: form.responsibility.trim()
+      rule_nature: form.ruleNature.trim(),
+      audit_stage: form.auditStage.trim(),
+      audit_dimension: form.auditDimension.trim(),
+      apply_scope: {
+        project_types: splitLines(form.projectTypesText),
+        repair_modes: splitLines(form.repairModesText),
+        applicable_objects: splitLines(form.applicableObjectsText)
+      },
+      judgement_mode: form.judgementMode.trim(),
+      required_fields: splitLines(form.requiredFieldsText),
+      required_documents: splitLines(form.requiredDocumentsText),
+      field_expectations: parseJsonArray(form.fieldExpectationsText),
+      risk_points: splitLines(form.riskPointsText),
+      output_hint: {
+        conclusion_type: form.conclusionType.trim(),
+        risk_level: form.riskLevel.trim(),
+        message_template: form.messageTemplate.trim()
+      }
     }
   }
 }
@@ -288,6 +368,31 @@ async function openEditModal(rule) {
 function closeModal() {
   modalVisible.value = false
   formRef.value?.resetFields()
+}
+
+function applyRuleToCurrentView(rule) {
+  if (!rule?.id) return
+
+  const existingIndex = dataSource.value.findIndex((item) => item.id === rule.id)
+  if (existingIndex >= 0) {
+    dataSource.value.splice(existingIndex, 1, rule)
+  }
+
+  if (selectedRule.value?.id === rule.id) {
+    selectedRule.value = rule
+  }
+}
+
+function onTableRow(record) {
+  return {
+    onClick: () => {
+      selectedRule.value = record
+    }
+  }
+}
+
+function tableRowClassName(record) {
+  return selectedRule.value?.id === record.id ? 'rule-row-selected' : ''
 }
 
 const fetchData = async () => {
@@ -339,18 +444,26 @@ function onLawMenuClick({ key }) {
   searchRules()
 }
 
+function clearFilters() {
+  category.value = ''
+  lawName.value = ''
+  searchRules()
+}
+
 async function saveRule() {
   await formRef.value?.validateFields()
   saving.value = true
   try {
     const payload = buildPayload()
+    let savedRule = null
     if (modalMode.value === 'create') {
-      await addComplianceRule(payload)
+      savedRule = await addComplianceRule(payload)
       message.success('规则已新增')
     } else {
-      await putComplianceRule(payload.id, payload)
+      savedRule = await putComplianceRule(payload.id, payload)
       message.success('规则已更新')
     }
+    applyRuleToCurrentView(savedRule)
     modalVisible.value = false
     await fetchData()
     selectedRule.value = dataSource.value.find((item) => item.id === payload.id) || dataSource.value[0] || null
@@ -386,12 +499,12 @@ onMounted(async () => {
 <template>
   <div class="rule-page">
     <div class="hero">
-      <div>
+      <div class="hero-copy">
         <h2>审核规则管理</h2>
         <p>查看规则分类、来源法规和提炼后的判定逻辑，为后续审核流程接入做准备。</p>
       </div>
       <div class="filters">
-        <a-button type="primary" v-per="'compliance:rule:create'" @click="openCreateModal">
+        <a-button class="page-action-button" v-per="'compliance:rule:create'" @click="openCreateModal">
           新增规则
         </a-button>
         <a-input-search
@@ -406,19 +519,72 @@ onMounted(async () => {
 
     <div class="stats">
       <a-card v-for="item in stats" :key="item.label" size="small">
-        <div class="stat-label">{{ item.label }}</div>
-        <div class="stat-value">{{ item.value }}</div>
+        <div class="stat-card" :class="{ 'stat-card--compact': item.compact }">
+          <div class="stat-icon" :class="[`stat-icon--${item.tone}`, { 'stat-icon--compact': item.compact }]">
+            <component :is="item.icon" />
+          </div>
+          <div>
+            <div class="stat-label">{{ item.label }}</div>
+            <div class="stat-value" :class="[`stat-value--${item.tone}`, { 'stat-value--compact': item.compact }]">
+              {{ item.value }}
+            </div>
+          </div>
+        </div>
       </a-card>
     </div>
 
     <div class="content">
-      <a-card class="list-card" title="规则列表">
+      <a-card class="list-card">
+        <template #title>
+          <div class="card-title-row">
+            <span>规则列表</span>
+            <a-popover trigger="click" placement="bottomRight" overlay-class-name="rule-filter-popover">
+              <template #content>
+                <div class="filter-panel">
+                  <div class="filter-panel__group">
+                    <div class="filter-panel__label">分类</div>
+                    <a-select
+                      v-model:value="category"
+                      allow-clear
+                      show-search
+                      placeholder="全部分类"
+                      :options="categoryOptions"
+                      style="width: 220px"
+                      @change="searchRules"
+                    />
+                  </div>
+                  <div class="filter-panel__group">
+                    <div class="filter-panel__label">所属法规</div>
+                    <a-select
+                      v-model:value="lawName"
+                      allow-clear
+                      show-search
+                      placeholder="全部法规"
+                      :options="mergedLawNames.map((item) => ({ label: item, value: item }))"
+                      style="width: 220px"
+                      @change="searchRules"
+                    />
+                  </div>
+                  <div class="filter-panel__footer">
+                    <a-button size="small" @click="clearFilters">清空</a-button>
+                  </div>
+                </div>
+              </template>
+              <button class="ghost-filter-button" type="button">
+                <FilterOutlined />
+                <span>筛选</span>
+              </button>
+            </a-popover>
+          </div>
+        </template>
         <a-table
           :columns="columns"
           :data-source="dataSource"
           :pagination="pagination"
           :loading="loading"
           :row-key="(record) => record.id"
+          :custom-row="onTableRow"
+          :row-class-name="tableRowClassName"
         >
           <template #headerCell="{ column }">
             <template v-if="column.key === 'category'">
@@ -464,59 +630,88 @@ onMounted(async () => {
               </span>
             </template>
             <template v-else-if="column.key === 'action'">
-              <a-space>
-                <a @click="selectedRule = record">查看详情</a>
-                <a v-per="'compliance:rule:update'" @click="openEditModal(record)">编辑</a>
-                <a v-per="'compliance:rule:delete'" class="danger-link" @click="confirmDelete(record)">删除</a>
-              </a-space>
+              <div class="row-actions">
+                <button
+                  v-per="'compliance:rule:update'"
+                  type="button"
+                  class="icon-action-button icon-action-button--edit"
+                  @click.stop="openEditModal(record)"
+                >
+                  <EditOutlined />
+                </button>
+                <button
+                  v-per="'compliance:rule:delete'"
+                  type="button"
+                  class="icon-action-button icon-action-button--delete"
+                  @click.stop="confirmDelete(record)"
+                >
+                  <DeleteOutlined />
+                </button>
+              </div>
             </template>
           </template>
         </a-table>
       </a-card>
 
-      <a-card class="detail-card" title="规则详情">
+      <a-card class="detail-card">
+        <template #title>
+          <span>规则详情</span>
+        </template>
         <template v-if="selectedRule">
           <div class="detail-header">
             <div>
+              <div class="detail-kicker">详情</div>
               <h3>{{ selectedRule.id }}</h3>
               <div class="detail-title">{{ selectedRule.full_title || selectedRule.clause_label }}</div>
             </div>
             <a-space>
-              <div class="category-badge">{{ selectedRule.category }}</div>
-              <a-button v-per="'compliance:rule:update'" size="small" @click="openEditModal(selectedRule)">
+              <div class="category-badge" :class="`category-badge--${getCategoryTone(selectedRule.category)}`">
+                {{ selectedRule.category }}
+              </div>
+              <a-button
+                v-per="'compliance:rule:update'"
+                class="page-action-button"
+                @click="openEditModal(selectedRule)"
+              >
+                <template #icon><EditOutlined /></template>
                 编辑
               </a-button>
             </a-space>
           </div>
-          <div class="detail-meta">
+      <div class="detail-meta">
             <div><strong>所属法规：</strong>{{ selectedRule.law_name }}</div>
             <div><strong>条款位置：</strong>{{ selectedRule.clause_label || '-' }}</div>
+            <div><strong>层级路径：</strong>{{ (selectedRule.path || []).join(' / ') || '-' }}</div>
+            <div><strong>节点类型：</strong>{{ selectedRule.node_type || '-' }}</div>
           </div>
 
-          <a-divider orientation="left">规则原文</a-divider>
-          <div class="section-text">{{ selectedRule.content }}</div>
+          <section class="detail-section">
+            <div class="section-heading">
+              <span class="section-heading__bar"></span>
+              <span>规则原文</span>
+            </div>
+            <div class="detail-surface">
+              <div class="section-text">{{ selectedRule.content }}</div>
+            </div>
+          </section>
 
-          <a-divider orientation="left">提炼逻辑</a-divider>
-          <a-descriptions :column="1" bordered size="small">
-            <a-descriptions-item label="动作">
-              {{ selectedRule.logic_rules?.action || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="适用对象">
-              {{ selectedRule.logic_rules?.target?.join('，') || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="触发条件">
-              {{ selectedRule.logic_rules?.condition?.join('，') || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="禁止事项">
-              {{ selectedRule.logic_rules?.forbidden?.join('，') || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="所需材料">
-              {{ selectedRule.logic_rules?.required_docs?.join('，') || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="责任主体">
-              {{ selectedRule.logic_rules?.responsibility || '-' }}
-            </a-descriptions-item>
-          </a-descriptions>
+          <section class="detail-section">
+            <div class="section-heading">
+              <span class="section-heading__bar"></span>
+              <span>提炼逻辑</span>
+            </div>
+            <div class="logic-grid">
+              <article
+                v-for="item in detailLogicItems"
+                :key="item.label"
+                class="logic-item"
+                :class="{ 'logic-item--half': item.half }"
+              >
+                <div class="logic-item__label">{{ item.label }}</div>
+                <div class="logic-item__value">{{ item.value }}</div>
+              </article>
+            </div>
+          </section>
         </template>
         <a-empty v-else description="请选择左侧规则查看详情" />
       </a-card>
@@ -573,26 +768,47 @@ onMounted(async () => {
           <a-form-item name="content" label="规则原文" class="span-2">
             <a-textarea v-model:value="form.content" :rows="5" />
           </a-form-item>
-          <a-form-item label="关键词" class="span-2">
-            <a-textarea v-model:value="form.keywordsText" :rows="3" placeholder="每行一个关键词" />
+          <a-form-item label="规则性质">
+            <a-input v-model:value="form.ruleNature" placeholder="如 process / document / amount" />
           </a-form-item>
-          <a-form-item label="动作">
-            <a-input v-model:value="form.action" />
+          <a-form-item label="审计阶段">
+            <a-input v-model:value="form.auditStage" placeholder="如 initiation / settlement" />
           </a-form-item>
-          <a-form-item label="责任主体">
-            <a-input v-model:value="form.responsibility" />
+          <a-form-item label="审计维度">
+            <a-input v-model:value="form.auditDimension" placeholder="如 entity / trace / process / amount" />
+          </a-form-item>
+          <a-form-item label="判定方式">
+            <a-input v-model:value="form.judgementMode" placeholder="如 boolean / threshold / document_presence" />
+          </a-form-item>
+          <a-form-item label="项目类型">
+            <a-textarea v-model:value="form.projectTypesText" :rows="3" placeholder="每行一个 project_type" />
+          </a-form-item>
+          <a-form-item label="维修模式">
+            <a-textarea v-model:value="form.repairModesText" :rows="3" placeholder="每行一个 repair_mode" />
           </a-form-item>
           <a-form-item label="适用对象">
-            <a-textarea v-model:value="form.targetText" :rows="3" placeholder="每行一个对象" />
+            <a-textarea v-model:value="form.applicableObjectsText" :rows="3" placeholder="每行一个 applicable_object" />
           </a-form-item>
-          <a-form-item label="触发条件">
-            <a-textarea v-model:value="form.conditionText" :rows="3" placeholder="每行一个条件" />
-          </a-form-item>
-          <a-form-item label="禁止事项">
-            <a-textarea v-model:value="form.forbiddenText" :rows="3" placeholder="每行一个禁止事项" />
+          <a-form-item label="所需字段">
+            <a-textarea v-model:value="form.requiredFieldsText" :rows="4" placeholder="每行一个 required_field" />
           </a-form-item>
           <a-form-item label="所需材料">
-            <a-textarea v-model:value="form.requiredDocsText" :rows="3" placeholder="每行一个材料" />
+            <a-textarea v-model:value="form.requiredDocumentsText" :rows="4" placeholder="每行一个 required_document" />
+          </a-form-item>
+          <a-form-item label="风险点">
+            <a-textarea v-model:value="form.riskPointsText" :rows="4" placeholder="每行一个 risk_point" />
+          </a-form-item>
+          <a-form-item label="字段判定(JSON)" class="span-2">
+            <a-textarea v-model:value="form.fieldExpectationsText" :rows="8" placeholder='[{"field":"has_vote_trace","operator":"==","value":true,"message":"应存在业主表决痕迹"}]' />
+          </a-form-item>
+          <a-form-item label="输出结论">
+            <a-input v-model:value="form.conclusionType" placeholder="如 compliant / manual_review" />
+          </a-form-item>
+          <a-form-item label="风险等级">
+            <a-input v-model:value="form.riskLevel" placeholder="如 low / medium / high" />
+          </a-form-item>
+          <a-form-item label="输出模板" class="span-2">
+            <a-textarea v-model:value="form.messageTemplate" :rows="3" />
           </a-form-item>
         </div>
       </a-form>
@@ -604,7 +820,7 @@ onMounted(async () => {
 .rule-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .hero {
@@ -613,9 +829,16 @@ onMounted(async () => {
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 16px;
-  padding: 24px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #fff9ef 0%, #fff3dc 100%);
+  padding: 26px 28px;
+  border: 1px solid #f1e3c4;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fffaf0 0%, #fff3da 100%);
+  box-shadow: 0 18px 44px rgba(180, 134, 38, 0.08);
+}
+
+.hero-copy {
+  flex: 1 1 360px;
+  min-width: 0;
 }
 
 .hero h2,
@@ -630,13 +853,63 @@ onMounted(async () => {
 
 .filters {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 12px;
   align-items: center;
 }
 
 .danger-link {
   color: #ff4d4f;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.icon-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-action-button--edit:hover {
+  background: #eef4ff;
+  color: #1677ff;
+}
+
+.icon-action-button--delete:hover {
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.page-action-button {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #1677ff;
+  border-radius: 12px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #1677ff;
+  box-shadow: 0 10px 22px rgba(22, 119, 255, 0.1);
+}
+
+.page-action-button:hover,
+.page-action-button:focus {
+  border-color: #4096ff;
+  background: #f4f9ff;
+  color: #4096ff;
 }
 
 .header-filter {
@@ -710,26 +983,95 @@ onMounted(async () => {
 .stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
+}
+
+.stats :deep(.ant-card) {
+  border: 1px solid #e7edf5;
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.stats :deep(.ant-card-body) {
+  padding: 18px 20px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stat-card--compact {
+  align-items: flex-start;
+}
+
+.stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  font-size: 20px;
+}
+
+.stat-icon--compact {
+  margin-top: 2px;
+}
+
+.stat-icon--blue {
+  color: #1677ff;
+  background: #edf4ff;
+}
+
+.stat-icon--gold {
+  color: #c28103;
+  background: #fff6df;
+}
+
+.stat-icon--slate {
+  color: #516072;
+  background: #f2f5f8;
 }
 
 .stat-label {
   color: #7c8596;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .stat-value {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
+  margin-top: 6px;
+  font-size: 27px;
+  font-weight: 700;
   color: #1f2a44;
+}
+
+.stat-value--blue {
+  color: #1677ff;
+}
+
+.stat-value--gold {
+  color: #c28103;
+}
+
+.stat-value--slate {
+  color: #1f2a44;
+}
+
+.stat-value--compact {
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 700;
 }
 
 .content {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  gap: 20px;
   min-width: 0;
+  align-items: start;
 }
 
 .list-card,
@@ -738,9 +1080,121 @@ onMounted(async () => {
   min-width: 0;
 }
 
+.list-card :deep(.ant-card),
+.detail-card :deep(.ant-card) {
+  border-radius: 20px;
+}
+
+.list-card :deep(.ant-card-head),
+.detail-card :deep(.ant-card-head) {
+  min-height: 64px;
+  border-bottom: 1px solid #eef2f6;
+}
+
 .list-card :deep(.ant-card-body),
 .detail-card :deep(.ant-card-body) {
   overflow: auto;
+  padding: 0;
+}
+
+.list-card {
+  border: 1px solid #e8edf5;
+  border-radius: 20px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+}
+
+.detail-card {
+  position: sticky;
+  top: 24px;
+  border: 1px solid #dbeafe;
+  border-radius: 20px;
+  box-shadow: 0 22px 52px rgba(37, 99, 235, 0.08);
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  font-weight: 700;
+  color: #1f2a44;
+}
+
+.ghost-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #66758a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost-filter-button:hover {
+  color: #1677ff;
+}
+
+.filter-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.filter-panel__group {
+  display: grid;
+  gap: 6px;
+}
+
+.filter-panel__label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-panel__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.list-card :deep(.ant-table) {
+  background: transparent;
+}
+
+.list-card :deep(.ant-table-thead > tr > th) {
+  padding-top: 16px;
+  padding-bottom: 16px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.list-card :deep(.ant-table-tbody > tr > td) {
+  padding-top: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #f0f4f8;
+  transition: background-color 0.2s ease;
+}
+
+.list-card :deep(.ant-table-tbody > tr.rule-row-selected > td) {
+  background: #f4f8ff;
+}
+
+.list-card :deep(.ant-table-tbody > tr:hover > td) {
+  background: #f8fbff;
+}
+
+.list-card :deep(.ant-pagination) {
+  padding: 16px 20px 18px;
+}
+
+.list-card :deep(.ant-card-head-title),
+.detail-card :deep(.ant-card-head-title) {
+  padding: 18px 0;
 }
 
 .detail-header {
@@ -748,6 +1202,7 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+  padding: 24px 24px 12px;
 }
 
 .form-grid {
@@ -765,30 +1220,138 @@ onMounted(async () => {
   color: #6a7282;
 }
 
+.detail-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-bottom: 10px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .category-badge {
   flex: 0 0 auto;
   max-width: 180px;
-  padding: 6px 10px;
-  border: 1px solid #8fc6ff;
-  border-radius: 8px;
-  background: #eef7ff;
-  color: #1677ff;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.5;
   white-space: normal;
   word-break: break-word;
 }
 
+.category-badge--slate {
+  color: #445066;
+  background: #f3f5f8;
+  border-color: #e2e8f0;
+}
+
+.category-badge--blue {
+  color: #215ea6;
+  background: #edf4ff;
+  border-color: #cdddff;
+}
+
+.category-badge--green {
+  color: #21674b;
+  background: #eefaf3;
+  border-color: #caecd9;
+}
+
+.category-badge--gold {
+  color: #8a5a12;
+  background: #fff6e8;
+  border-color: #f3ddba;
+}
+
+.category-badge--rose {
+  color: #9a435e;
+  background: #fff1f5;
+  border-color: #f3cfda;
+}
+
+.category-badge--purple {
+  color: #6f4aa3;
+  background: #f5f1ff;
+  border-color: #ddd1ff;
+}
+
 .detail-meta {
   display: grid;
   gap: 8px;
-  margin: 16px 0;
+  margin: 0;
+  padding: 0 24px 18px;
+  color: #334155;
+}
+
+.detail-section {
+  padding: 0 24px 24px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.section-heading__bar {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: #1677ff;
+}
+
+.detail-surface {
+  padding: 16px;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  background: #f8fafc;
 }
 
 .section-text {
   white-space: pre-wrap;
   line-height: 1.8;
   color: #2f3542;
+}
+
+.logic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.logic-item {
+  grid-column: 1 / -1;
+  padding: 16px;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.logic-item--half {
+  grid-column: span 1;
+}
+
+.logic-item__label {
+  margin-bottom: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.logic-item__value {
+  color: #334155;
+  line-height: 1.75;
 }
 
 @media (max-width: 960px) {
@@ -806,6 +1369,7 @@ onMounted(async () => {
 
   .filters {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .stats {
@@ -819,6 +1383,18 @@ onMounted(async () => {
 
   .detail-header {
     flex-direction: column;
+  }
+
+  .detail-card {
+    position: static;
+  }
+
+  .logic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .logic-item--half {
+    grid-column: auto;
   }
 
   .form-grid {

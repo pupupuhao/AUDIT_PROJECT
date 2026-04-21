@@ -20,6 +20,8 @@ except ImportError:  # pragma: no cover
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = BASE_DIR / "db" / "schema.sql"
+NEW_RULE_TABLE = "rule_db_new_pure"
+NEW_RULE_VECTOR_TABLE = "rule_db_new_pure_vector"
 
 
 class PgVectorStore:
@@ -105,6 +107,374 @@ class PgVectorStore:
             with conn.cursor() as cur:
                 cur.execute(sql, payload)
             conn.commit()
+
+    def search_new_pure_rules(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        embedding = embed_text(query)
+        sql = f"""
+        SELECT
+            rule_id, doc_id, parent_id, law_name, node_level, node_type,
+            clause_label, item_label, subitem_label, sub_clause,
+            full_title, title_text, content, clean_text, embedding_text,
+            parent_context, path, category, logic_rules, required_fields,
+            1 - (embedding <=> %(embedding)s::vector) AS score
+        FROM {NEW_RULE_VECTOR_TABLE}
+        ORDER BY embedding <=> %(embedding)s::vector
+        LIMIT %(top_k)s
+        """
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    {
+                        "embedding": self._vector_literal(embedding),
+                        "top_k": top_k,
+                    },
+                )
+                rows = cur.fetchall()
+
+        results = []
+        for row in rows:
+            logic_rules = row[18] or {}
+            if logic_rules and not logic_rules.get("required_fields"):
+                logic_rules["required_fields"] = row[19] or []
+            results.append(
+                {
+                    "id": row[0],
+                    "doc_id": row[1],
+                    "parent_id": row[2],
+                    "law_name": row[3],
+                    "node_level": row[4],
+                    "node_type": row[5],
+                    "clause_label": row[6],
+                    "item_label": row[7] or "",
+                    "subitem_label": row[8] or "",
+                    "sub_clause": row[9] or "",
+                    "full_title": row[10] or "",
+                    "title_text": row[11] or "",
+                    "content": row[12] or "",
+                    "clean_text": row[13] or "",
+                    "embedding_text": row[14] or "",
+                    "parent_context": row[15] or "",
+                    "path": row[16] or [],
+                    "category": row[17] or "",
+                    "logic_rules": logic_rules,
+                    "score": float(row[20] or 0),
+                }
+            )
+        return results
+
+    def list_new_pure_rules(
+        self,
+        offset: int = 1,
+        limit: int = 20,
+        keyword: str = "",
+        category: str = "",
+        law_name: str = "",
+    ) -> Dict[str, Any]:
+        filters = []
+        payload: Dict[str, Any] = {
+            "offset": max(offset - 1, 0) * limit,
+            "limit": limit,
+        }
+
+        if keyword:
+            filters.append(
+                """
+                (
+                    rule_id ILIKE %(keyword)s
+                    OR law_name ILIKE %(keyword)s
+                    OR clause_label ILIKE %(keyword)s
+                    OR full_title ILIKE %(keyword)s
+                    OR content ILIKE %(keyword)s
+                )
+                """
+            )
+            payload["keyword"] = f"%{keyword}%"
+        if category:
+            filters.append("category = %(category)s")
+            payload["category"] = category
+        if law_name:
+            filters.append("law_name = %(law_name)s")
+            payload["law_name"] = law_name
+
+        where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
+        count_sql = f"SELECT COUNT(*) FROM {NEW_RULE_TABLE} {where_sql}"
+        list_sql = f"""
+        SELECT
+            id, doc_id, parent_id, law_name, node_level, node_type,
+            clause_label, item_label, subitem_label, sub_clause,
+            full_title, title_text, content, clean_text, embedding_text,
+            parent_context, path, rule_index, category, logic_rules
+        FROM {NEW_RULE_TABLE}
+        {where_sql}
+        ORDER BY id ASC
+        OFFSET %(offset)s
+        LIMIT %(limit)s
+        """
+        categories_sql = f"""
+        SELECT DISTINCT category
+        FROM {NEW_RULE_TABLE}
+        WHERE category IS NOT NULL AND category != ''
+        ORDER BY category ASC
+        """
+        law_count_sql = f"SELECT COUNT(DISTINCT law_name) FROM {NEW_RULE_TABLE} {where_sql}"
+        latest_updated_sql = f"SELECT MAX(updated_at) FROM {NEW_RULE_TABLE} {where_sql}"
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(count_sql, payload)
+                total = cur.fetchone()[0]
+                cur.execute(list_sql, payload)
+                rows = cur.fetchall()
+                cur.execute(categories_sql)
+                category_rows = cur.fetchall()
+                cur.execute(law_count_sql, payload)
+                law_count = cur.fetchone()[0] or 0
+                cur.execute(latest_updated_sql, payload)
+                latest_updated_at = cur.fetchone()[0]
+
+        items = []
+        for row in rows:
+            items.append(
+                {
+                    "id": row[0],
+                    "doc_id": row[1],
+                    "parent_id": row[2],
+                    "law_name": row[3],
+                    "node_level": row[4],
+                    "node_type": row[5],
+                    "clause_label": row[6],
+                    "item_label": row[7] or "",
+                    "subitem_label": row[8] or "",
+                    "sub_clause": row[9] or "",
+                    "full_title": row[10] or "",
+                    "title_text": row[11] or "",
+                    "content": row[12] or "",
+                    "clean_text": row[13] or "",
+                    "embedding_text": row[14] or "",
+                    "parent_context": row[15] or "",
+                    "path": row[16] or [],
+                    "index": row[17],
+                    "category": row[18] or "",
+                    "logic_rules": row[19] or {},
+                }
+            )
+
+        return {
+            "total": total,
+            "items": items,
+            "categories": [row[0] for row in category_rows],
+            "law_count": law_count,
+            "latest_updated_at": latest_updated_at.isoformat() if latest_updated_at else None,
+        }
+
+    def get_new_pure_rule(self, rule_id: str) -> Optional[Dict[str, Any]]:
+        sql = f"""
+        SELECT
+            id, doc_id, parent_id, law_name, node_level, node_type,
+            clause_label, item_label, subitem_label, sub_clause,
+            full_title, title_text, content, clean_text, embedding_text,
+            parent_context, path, rule_index, category, logic_rules
+        FROM {NEW_RULE_TABLE}
+        WHERE id = %(rule_id)s
+        LIMIT 1
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"rule_id": rule_id})
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "doc_id": row[1],
+            "parent_id": row[2],
+            "law_name": row[3],
+            "node_level": row[4],
+            "node_type": row[5],
+            "clause_label": row[6],
+            "item_label": row[7] or "",
+            "subitem_label": row[8] or "",
+            "sub_clause": row[9] or "",
+            "full_title": row[10] or "",
+            "title_text": row[11] or "",
+            "content": row[12] or "",
+            "clean_text": row[13] or "",
+            "embedding_text": row[14] or "",
+            "parent_context": row[15] or "",
+            "path": row[16] or [],
+            "index": row[17],
+            "category": row[18] or "",
+            "logic_rules": row[19] or {},
+        }
+
+    def count_new_pure_rules_by_law_names(self, law_names: List[str]) -> Dict[str, int]:
+        names = [name for name in law_names if name]
+        if not names:
+            return {}
+        sql = f"""
+        SELECT law_name, COUNT(*)
+        FROM {NEW_RULE_TABLE}
+        WHERE law_name = ANY(%(law_names)s)
+        GROUP BY law_name
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"law_names": names})
+                rows = cur.fetchall()
+        return {row[0]: int(row[1]) for row in rows}
+
+    def upsert_new_pure_rule(self, rule: Dict[str, Any]) -> None:
+        embedding_text = " ".join(
+            [
+                rule.get("law_name", ""),
+                rule.get("full_title", ""),
+                rule.get("parent_context", ""),
+                rule.get("embedding_text", "") or rule.get("clean_text", "") or rule.get("content", ""),
+            ]
+        ).strip()
+        sql = f"""
+        INSERT INTO {NEW_RULE_TABLE} (
+            id, doc_id, parent_id, law_name, node_level, node_type,
+            clause_label, item_label, subitem_label, sub_clause,
+            full_title, title_text, display_text, content, embedding_text, clean_text,
+            parent_context, path, rule_index, category, logic_rules, raw_payload, updated_at
+        )
+        VALUES (
+            %(id)s, %(doc_id)s, %(parent_id)s, %(law_name)s, %(node_level)s, %(node_type)s,
+            %(clause_label)s, %(item_label)s, %(subitem_label)s, %(sub_clause)s,
+            %(full_title)s, %(title_text)s, %(display_text)s, %(content)s, %(embedding_text)s, %(clean_text)s,
+            %(parent_context)s, %(path)s::jsonb, %(rule_index)s, %(category)s, %(logic_rules)s::jsonb, %(raw_payload)s::jsonb, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            doc_id = EXCLUDED.doc_id,
+            parent_id = EXCLUDED.parent_id,
+            law_name = EXCLUDED.law_name,
+            node_level = EXCLUDED.node_level,
+            node_type = EXCLUDED.node_type,
+            clause_label = EXCLUDED.clause_label,
+            item_label = EXCLUDED.item_label,
+            subitem_label = EXCLUDED.subitem_label,
+            sub_clause = EXCLUDED.sub_clause,
+            full_title = EXCLUDED.full_title,
+            title_text = EXCLUDED.title_text,
+            display_text = EXCLUDED.display_text,
+            content = EXCLUDED.content,
+            embedding_text = EXCLUDED.embedding_text,
+            clean_text = EXCLUDED.clean_text,
+            parent_context = EXCLUDED.parent_context,
+            path = EXCLUDED.path,
+            rule_index = EXCLUDED.rule_index,
+            category = EXCLUDED.category,
+            logic_rules = EXCLUDED.logic_rules,
+            raw_payload = EXCLUDED.raw_payload,
+            updated_at = CURRENT_TIMESTAMP
+        """
+        payload = {
+            "id": rule.get("id", ""),
+            "doc_id": rule.get("doc_id", ""),
+            "parent_id": rule.get("parent_id"),
+            "law_name": rule.get("law_name", ""),
+            "node_level": rule.get("node_level"),
+            "node_type": rule.get("node_type", ""),
+            "clause_label": rule.get("clause_label", ""),
+            "item_label": rule.get("item_label", ""),
+            "subitem_label": rule.get("subitem_label", ""),
+            "sub_clause": rule.get("sub_clause", ""),
+            "full_title": rule.get("full_title", ""),
+            "title_text": rule.get("title_text", ""),
+            "display_text": rule.get("content", ""),
+            "content": rule.get("content", ""),
+            "embedding_text": embedding_text,
+            "clean_text": rule.get("clean_text", "") or embedding_text,
+            "parent_context": rule.get("parent_context", ""),
+            "path": json.dumps(rule.get("path", []), ensure_ascii=False),
+            "rule_index": rule.get("index"),
+            "category": rule.get("category", ""),
+            "logic_rules": json.dumps(rule.get("logic_rules", {}), ensure_ascii=False),
+            "raw_payload": json.dumps(rule, ensure_ascii=False),
+        }
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, payload)
+            conn.commit()
+
+        vector_sql = f"""
+        INSERT INTO {NEW_RULE_VECTOR_TABLE} (
+            rule_id, doc_id, parent_id, law_name, node_level, node_type,
+            clause_label, item_label, subitem_label, sub_clause,
+            full_title, title_text, content, clean_text, embedding_text,
+            parent_context, path, category, logic_rules, required_fields, embedding, updated_at
+        )
+        VALUES (
+            %(rule_id)s, %(doc_id)s, %(parent_id)s, %(law_name)s, %(node_level)s, %(node_type)s,
+            %(clause_label)s, %(item_label)s, %(subitem_label)s, %(sub_clause)s,
+            %(full_title)s, %(title_text)s, %(content)s, %(clean_text)s, %(embedding_text)s,
+            %(parent_context)s, %(path)s::jsonb, %(category)s, %(logic_rules)s::jsonb, %(required_fields)s::jsonb, %(embedding)s::vector, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (rule_id) DO UPDATE SET
+            doc_id = EXCLUDED.doc_id,
+            parent_id = EXCLUDED.parent_id,
+            law_name = EXCLUDED.law_name,
+            node_level = EXCLUDED.node_level,
+            node_type = EXCLUDED.node_type,
+            clause_label = EXCLUDED.clause_label,
+            item_label = EXCLUDED.item_label,
+            subitem_label = EXCLUDED.subitem_label,
+            sub_clause = EXCLUDED.sub_clause,
+            full_title = EXCLUDED.full_title,
+            title_text = EXCLUDED.title_text,
+            content = EXCLUDED.content,
+            clean_text = EXCLUDED.clean_text,
+            embedding_text = EXCLUDED.embedding_text,
+            parent_context = EXCLUDED.parent_context,
+            path = EXCLUDED.path,
+            category = EXCLUDED.category,
+            logic_rules = EXCLUDED.logic_rules,
+            required_fields = EXCLUDED.required_fields,
+            embedding = EXCLUDED.embedding,
+            updated_at = CURRENT_TIMESTAMP
+        """
+        vector_payload = {
+            "rule_id": rule.get("id", ""),
+            "doc_id": rule.get("doc_id", ""),
+            "parent_id": rule.get("parent_id"),
+            "law_name": rule.get("law_name", ""),
+            "node_level": rule.get("node_level"),
+            "node_type": rule.get("node_type", ""),
+            "clause_label": rule.get("clause_label", ""),
+            "item_label": rule.get("item_label", ""),
+            "subitem_label": rule.get("subitem_label", ""),
+            "sub_clause": rule.get("sub_clause", ""),
+            "full_title": rule.get("full_title", ""),
+            "title_text": rule.get("title_text", ""),
+            "content": rule.get("content", ""),
+            "clean_text": rule.get("clean_text", "") or embedding_text,
+            "embedding_text": embedding_text,
+            "parent_context": rule.get("parent_context", ""),
+            "path": json.dumps(rule.get("path", []), ensure_ascii=False),
+            "category": rule.get("category", ""),
+            "logic_rules": json.dumps(rule.get("logic_rules", {}), ensure_ascii=False),
+            "required_fields": json.dumps(rule.get("logic_rules", {}).get("required_fields", []), ensure_ascii=False),
+            "embedding": self._vector_literal(embed_text(embedding_text)),
+        }
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(vector_sql, vector_payload)
+            conn.commit()
+
+    def delete_new_pure_rule(self, rule_id: str) -> int:
+        full_sql = f"DELETE FROM {NEW_RULE_TABLE} WHERE id = %(rule_id)s"
+        vector_sql = f"DELETE FROM {NEW_RULE_VECTOR_TABLE} WHERE rule_id = %(rule_id)s"
+        deleted = 0
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(vector_sql, {"rule_id": rule_id})
+                cur.execute(full_sql, {"rule_id": rule_id})
+                deleted = cur.rowcount or 0
+            conn.commit()
+        return deleted
 
     def search_rules(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         embedding = embed_text(query)
