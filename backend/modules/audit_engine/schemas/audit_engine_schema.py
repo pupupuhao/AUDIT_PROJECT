@@ -4,11 +4,17 @@ from pydantic import BaseModel, Field
 
 
 class AuditRequest(BaseModel):
-    project_name: Optional[str] = Field(default=None, description="工程名称；优先使用 sources 中的主表字段")
-    sources: Dict[str, Any] = Field(
+    project_name: Optional[str] = Field(default=None, description="工程名称；优先使用 standard_fields.project_name.value")
+    standard_fields: Dict[str, Any] = Field(
         default_factory=dict,
-        description="统一输入来源，按表或来源分组，如 t_workspace/ws_project/blueprint_draft/hou_notion_sum/project_contract/ocr/text",
+        description="标准字段运行时对象，按 field_key 分组，每个字段包含 value/status/candidates/selected_index",
     )
+    flat_fields: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="手工演示表单输入；API 层会转换为标准字段运行时对象，pipeline 不直接读取该结构。",
+    )
+    missing_fields: List[str] = Field(default_factory=list)
+    conflicting_fields: List[str] = Field(default_factory=list)
 
 
 class BasisDocument(BaseModel):
@@ -77,7 +83,6 @@ class AuditResponse(BaseModel):
     project_name: str
     mapped_objects: List[MappedObject] = Field(default_factory=list)
     matched_object_ids: List[int] = Field(default_factory=list)
-    normalized_tags: List[str] = Field(default_factory=list)
     overall_result: str
     display_result: str
     reason_codes: List[str] = Field(default_factory=list)

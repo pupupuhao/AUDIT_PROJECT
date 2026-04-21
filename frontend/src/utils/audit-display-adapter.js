@@ -1,13 +1,13 @@
 const TOP_STATUS_LABELS = {
   compliant: '通过',
-  need_supplement: '需补充',
+  need_supplement: '需补充材料',
   manual_review: '需复核',
   non_compliant: '不符合'
 }
 
 const SUB_STATUS_LABELS = {
   compliant: '通过',
-  need_supplement: '需补充',
+  need_supplement: '需补充材料',
   manual_review: '需复核',
   non_compliant: '不符合',
   info_only: '仅展示'
@@ -63,7 +63,7 @@ export function toCustomerReason(text) {
 }
 
 export function getTopStatusLabel(overallResult, displayResult) {
-  return TOP_STATUS_LABELS[overallResult] || displayResult || '需补充'
+  return TOP_STATUS_LABELS[overallResult] || displayResult || '需补充材料'
 }
 
 export function getTopReasons(result) {
@@ -119,7 +119,7 @@ function getSubTone(item) {
 
 function getSubStatus(item) {
   if (!item || item.applicable === false) return '不适用'
-  return SUB_STATUS_LABELS[item.result] || item.display_result || '需补充'
+  return SUB_STATUS_LABELS[item.result] || item.display_result || '需补充材料'
 }
 
 function getSubBrief(key, item) {
