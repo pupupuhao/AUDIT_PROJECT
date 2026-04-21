@@ -18,7 +18,7 @@ function buildFilesFormData(files) {
 
 export function parseAuditFiles(files) {
   return request({
-    url: '/audit/engine/files/parse',
+    url: '/audit-engine/files/parse',
     method: 'post',
     data: buildFilesFormData(files)
   })
@@ -26,7 +26,7 @@ export function parseAuditFiles(files) {
 
 export function judgeAuditFiles(files, params = {}) {
   return request({
-    url: '/audit/engine/files/judge',
+    url: '/audit-engine/files/judge',
     method: 'post',
     params,
     data: buildFilesFormData(files)
