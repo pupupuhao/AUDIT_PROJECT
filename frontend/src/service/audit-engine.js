@@ -24,6 +24,14 @@ export function parseAuditFiles(files) {
   })
 }
 
+export function analyzeSingleAuditFile(files) {
+  return request({
+    url: '/audit-engine/files/analyze-single',
+    method: 'post',
+    data: buildFilesFormData(files)
+  })
+}
+
 export function judgeAuditFiles(files, params = {}) {
   return request({
     url: '/audit-engine/files/judge',

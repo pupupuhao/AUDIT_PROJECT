@@ -75,7 +75,7 @@ export function getTopReasons(result) {
 
 export function getBasisList(basisDocuments) {
   const documents = basisDocuments || []
-  return dedupeStrings(documents.map((item) => item?.display_name || item?.title).filter(Boolean))
+  return dedupeStrings(documents.map((item) => item?.display_text || item?.display_name || item?.title).filter(Boolean))
 }
 
 export function getTopBasisView(basisDocuments) {
@@ -89,7 +89,7 @@ export function getSubBasisPairs(basisDocuments) {
   const seen = new Set()
   const pairs = []
   for (const item of documents) {
-    const lawText = String(item?.display_name || item?.title || '').trim()
+    const lawText = String(item?.display_text || item?.display_name || item?.title || '').trim()
     if (!lawText) continue
     const basisExplanation = String(item?.basis_explanation || '当前依据用于本分项判断展示。').trim()
     const key = `${lawText}__${basisExplanation}`

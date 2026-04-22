@@ -37,8 +37,10 @@ def _default_compliant_sources(layer_key: str, repair_nature: Optional[str] = No
 
 
 def _normalize_source(source: Dict[str, Any]) -> Dict[str, Any]:
+    display_name = _none_if_blank(source.get("display_name"))
     return {
-        "display_name": _none_if_blank(source.get("display_name")),
+        "display_name": display_name,
+        "display_text": _none_if_blank(source.get("display_text")) or display_name,
         "source_type": _none_if_blank(source.get("source_type")),
         "title": _none_if_blank(source.get("title")),
         "issuer": _none_if_blank(source.get("issuer")),

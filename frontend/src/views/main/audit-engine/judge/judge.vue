@@ -2,7 +2,12 @@
 import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
-import { judgeAuditEngine, judgeAuditFiles, parseAuditFiles } from '@/service/audit-engine'
+import {
+  analyzeSingleAuditFile,
+  judgeAuditEngine,
+  judgeAuditFiles,
+  parseAuditFiles
+} from '@/service/audit-engine'
 import {
   buildSubAuditView,
   getTopBasisView,
@@ -18,6 +23,7 @@ const uploadFileList = ref([])
 const fileLoading = ref(false)
 const parseResult = ref(null)
 const fileJudgeResult = ref(null)
+const singleAnalysisResult = ref(null)
 
 const form = reactive({
   project_name: '',
@@ -133,6 +139,56 @@ const subAuditViews = computed(() =>
 )
 const parsedFiles = computed(() => parseResult.value?.files || [])
 const judgedFiles = computed(() => fileJudgeResult.value?.files || [])
+const singleAuditResult = computed(() => singleAnalysisResult.value?.audit_result || null)
+const singleReportSummary = computed(() => singleAnalysisResult.value?.report_summary || null)
+const singleProblemCards = computed(() => buildProblemCards(singleAuditResult.value))
+const singleSubAuditViews = computed(() =>
+  subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, singleAuditResult.value?.sub_audits?.[meta.key]))
+)
+const rawFieldRows = computed(() => objectRows(singleAnalysisResult.value?.raw_fields || {}))
+const llmFieldRows = computed(() => objectRows(singleAnalysisResult.value?.llm_result?.fields || {}))
+const finalFieldRows = computed(() => objectRows(singleAnalysisResult.value?.sanitized_fields || {}))
+
+function objectRows(value) {
+  return Object.entries(value || {}).map(([key, fieldValue]) => ({ key, value: fieldValue }))
+}
+
+function formatValue(value) {
+  if (value === null || value === undefined || value === '') return '未识别'
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function getRiskLevel(auditResult) {
+  if (!auditResult) return '未审计'
+  if (auditResult.overall_result === 'non_compliant') return '高'
+  if (auditResult.overall_result === 'manual_review') return '中'
+  if (auditResult.overall_result === 'need_supplement') return '中'
+  return '低'
+}
+
+function buildProblemCards(auditResult) {
+  if (!auditResult) return []
+  const cards = []
+  Object.entries(auditResult.sub_audits || {}).forEach(([subKey, item]) => {
+    if (!item || item.result === 'compliant' || item.result === 'info_only') return
+    const codes = item.reason_codes?.length ? item.reason_codes : ['NO_REASON_CODE']
+    codes.forEach((code, index) => {
+      cards.push({
+        key: `${subKey}-${code}-${index}`,
+        title: code,
+        reasonCode: code,
+        description: item.reasons?.[index] || item.reasons?.[0] || '规则引擎提示该项需要处理。',
+        suggestion: item.missing_items?.length
+          ? `请补充或核验：${item.missing_items.join('、')}`
+          : '请结合原始材料进行人工复核。',
+        basis: item.basis_documents || []
+      })
+    })
+  })
+  return cards
+}
 
 function buildPayload() {
   const projectName = String(form.project_name || '').trim()
@@ -221,6 +277,7 @@ function handleFileListChange(info) {
   uploadFileList.value = info.fileList || []
   parseResult.value = null
   fileJudgeResult.value = null
+  singleAnalysisResult.value = null
 }
 
 function getSelectedFiles() {
@@ -238,6 +295,22 @@ async function parseFiles() {
   fileLoading.value = true
   try {
     parseResult.value = await parseAuditFiles(files)
+    fileJudgeResult.value = null
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+async function analyzeSingleFile() {
+  const files = getSelectedFiles()
+  if (!files.length) {
+    message.warning('请先选择 Excel 文件')
+    return
+  }
+  fileLoading.value = true
+  try {
+    singleAnalysisResult.value = await analyzeSingleAuditFile(files)
+    parseResult.value = null
     fileJudgeResult.value = null
   } finally {
     fileLoading.value = false
@@ -385,18 +458,173 @@ function getJudgedRowHeader(file, item) {
               <a-button>选择文件</a-button>
             </a-upload>
             <a-space wrap>
-              <a-button :loading="fileLoading" :disabled="!uploadFileList.length" @click="parseFiles">
-                解析预览
-              </a-button>
               <a-button
                 type="primary"
                 :loading="fileLoading"
                 :disabled="!uploadFileList.length"
+                @click="analyzeSingleFile"
+              >
+                单项目分析
+              </a-button>
+              <a-button :loading="fileLoading" :disabled="!uploadFileList.length" @click="parseFiles">
+                解析预览
+              </a-button>
+              <a-button
+                :loading="fileLoading"
+                :disabled="!uploadFileList.length"
                 @click="judgeFiles()"
               >
-                批量审计
+                旧版批量审计
               </a-button>
             </a-space>
+
+            <template v-if="singleAnalysisResult">
+              <a-alert
+                v-if="singleAnalysisResult.status !== 'analyzed'"
+                type="warning"
+                show-icon
+                :message="singleAnalysisResult.message || '当前文件未进入单项目审计闭环'"
+              />
+              <template v-else>
+                <div class="single-flow">
+                  <a-card size="small" title="1. AI提取信息：原始抽取与辅助归类">
+                    <a-space direction="vertical" size="middle" style="width: 100%">
+                      <a-alert
+                        type="info"
+                        show-icon
+                        message="AI归类仅作为标准字段候选，不代表最终审计事实；最终结论由规则引擎输出。"
+                      />
+                      <a-descriptions size="small" bordered :column="1">
+                        <a-descriptions-item label="上传文件">{{ singleAnalysisResult.filename }}</a-descriptions-item>
+                        <a-descriptions-item label="项目名称">{{ singleAnalysisResult.project_name }}</a-descriptions-item>
+                        <a-descriptions-item label="项目主键">{{ singleAnalysisResult.project_key || '无' }}</a-descriptions-item>
+                        <a-descriptions-item label="LLM 状态">
+                          {{ singleAnalysisResult.llm_result?.available ? '已调用本地 LLM' : '本地 LLM 不可用，已降级' }}
+                        </a-descriptions-item>
+                      </a-descriptions>
+                      <div class="field-columns">
+                        <a-card size="small" title="原始抽取 raw_fields">
+                          <a-table
+                            size="small"
+                            :pagination="false"
+                            :data-source="rawFieldRows"
+                            :columns="[
+                              { title: '字段', dataIndex: 'key' },
+                              { title: '值', dataIndex: 'value' }
+                            ]"
+                          >
+                            <template #bodyCell="{ column, record }">
+                              <template v-if="column.dataIndex === 'value'">{{ formatValue(record.value) }}</template>
+                            </template>
+                          </a-table>
+                        </a-card>
+                        <a-card size="small" title="AI归类 llm_fields">
+                          <a-table
+                            size="small"
+                            :pagination="false"
+                            :data-source="llmFieldRows"
+                            :columns="[
+                              { title: '字段', dataIndex: 'key' },
+                              { title: '值', dataIndex: 'value' }
+                            ]"
+                          >
+                            <template #bodyCell="{ column, record }">
+                              <template v-if="column.dataIndex === 'value'">{{ formatValue(record.value) }}</template>
+                            </template>
+                          </a-table>
+                        </a-card>
+                      </div>
+                      <a-card size="small" title="sanitized_fields">
+                        <a-table
+                          size="small"
+                          :pagination="false"
+                          :data-source="finalFieldRows"
+                          :columns="[
+                            { title: '字段', dataIndex: 'key' },
+                            { title: '值', dataIndex: 'value' }
+                          ]"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.dataIndex === 'value'">{{ formatValue(record.value) }}</template>
+                          </template>
+                        </a-table>
+                      </a-card>
+                      <a-alert
+                        v-if="(singleAnalysisResult.llm_result?.uncertainties || []).length"
+                        type="warning"
+                        show-icon
+                        :message="singleAnalysisResult.llm_result.uncertainties.join('；')"
+                      />
+                      <a-alert
+                        v-if="(singleAnalysisResult.field_conflicts || []).length"
+                        type="warning"
+                        show-icon
+                        message="存在字段冲突，已保留 parser / 规则字段为 final_value，建议人工复核。"
+                      />
+                    </a-space>
+                  </a-card>
+
+                  <a-card size="small" title="2. 审计过程：规则引擎分项结果">
+                    <a-space direction="vertical" size="middle" style="width: 100%">
+                      <a-card
+                        v-for="item in singleSubAuditViews"
+                        :key="`single-${item.key}`"
+                        size="small"
+                        :title="item.title"
+                        class="sub-audit-card"
+                        :class="`sub-audit-card--${item.tone}`"
+                      >
+                        <a-descriptions size="small" :column="1">
+                          <a-descriptions-item label="分项结论">{{ item.status }}</a-descriptions-item>
+                          <a-descriptions-item label="规则说明">{{ item.brief }}</a-descriptions-item>
+                          <a-descriptions-item label="命中依据">{{ item.basis.join('；') || '无' }}</a-descriptions-item>
+                        </a-descriptions>
+                      </a-card>
+                    </a-space>
+                  </a-card>
+
+                  <a-card size="small" title="3. 审计结果：审计人员视图">
+                    <a-space direction="vertical" size="middle" style="width: 100%">
+                      <div class="overview-grid">
+                        <a-statistic title="总体结论" :value="getTopStatusLabel(singleAuditResult?.overall_result, singleAuditResult?.display_result)" />
+                        <a-statistic title="风险等级" :value="getRiskLevel(singleAuditResult)" />
+                        <a-statistic title="问题数量" :value="singleProblemCards.length" />
+                        <a-statistic title="人工复核" :value="singleAuditResult?.manual_review_required || (singleAnalysisResult.field_conflicts || []).length ? '建议' : '暂不需要'" />
+                      </div>
+                      <a-card size="small" class="report-summary-card" :title="singleReportSummary?.title || '审计报告摘要'">
+                        {{ singleReportSummary?.summary || singleAuditResult?.display_summary }}
+                      </a-card>
+                      <a-empty v-if="!singleProblemCards.length" description="未识别到需补正的问题卡片" />
+                      <a-card
+                        v-for="card in singleProblemCards"
+                        v-else
+                        :key="card.key"
+                        size="small"
+                        class="problem-card"
+                        :title="card.title"
+                      >
+                        <a-descriptions size="small" :column="1">
+                          <a-descriptions-item label="问题说明">{{ card.description }}</a-descriptions-item>
+                          <a-descriptions-item label="reason_code">{{ card.reasonCode }}</a-descriptions-item>
+                          <a-descriptions-item label="补正建议">{{ card.suggestion }}</a-descriptions-item>
+                          <a-descriptions-item label="相关法规依据">
+                            <a-collapse ghost>
+                              <a-collapse-panel key="basis" header="展开依据">
+                                <a-space direction="vertical" size="small">
+                                  <span v-for="basis in card.basis" :key="basis.display_text || basis.display_name">
+                                    {{ basis.display_text || basis.display_name || basis.title }}
+                                  </span>
+                                </a-space>
+                              </a-collapse-panel>
+                            </a-collapse>
+                          </a-descriptions-item>
+                        </a-descriptions>
+                      </a-card>
+                    </a-space>
+                  </a-card>
+                </div>
+              </template>
+            </template>
 
             <template v-if="parsedFiles.length">
               <div class="group-title">解析预览</div>
@@ -644,6 +872,33 @@ function getJudgedRowHeader(file, item) {
   gap: 12px;
 }
 
+.single-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-summary-card {
+  border-left: 4px solid #1677ff;
+  background: #f8fbff;
+}
+
+.problem-card {
+  border-left: 4px solid #ff4d4f;
+}
+
 .fact-item {
   display: flex;
   flex-direction: column;
@@ -724,5 +979,13 @@ function getJudgedRowHeader(file, item) {
   height: auto;
   padding: 0;
   text-align: left;
+}
+
+@media (max-width: 960px) {
+  .field-columns,
+  .overview-grid,
+  .fact-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -25,6 +25,10 @@ LLM_API_KEY = os.getenv(
 LLM_API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 LLM_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 
+LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
+LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen3.6-35b-a3b")
+LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "lm-studio")
+
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "huggingface")
 EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 EMBEDDING_API_URL = os.getenv(

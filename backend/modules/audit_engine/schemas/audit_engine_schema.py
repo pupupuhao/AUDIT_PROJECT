@@ -19,6 +19,7 @@ class AuditRequest(BaseModel):
 
 class BasisDocument(BaseModel):
     display_name: Optional[str] = None
+    display_text: Optional[str] = None
     source_type: Optional[str] = None
     title: Optional[str] = None
     issuer: Optional[str] = None
