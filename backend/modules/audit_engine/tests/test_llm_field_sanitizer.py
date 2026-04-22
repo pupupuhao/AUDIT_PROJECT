@@ -1,4 +1,5 @@
 from modules.audit_engine.services.llm_field_sanitizer import sanitize_llm_output
+from modules.audit_engine.services.local_llm_client import _classify_request_error
 
 
 def test_sanitizer_drops_unknown_fields_and_invalid_evidence():
@@ -42,3 +43,11 @@ def test_sanitizer_nulls_invalid_enum_and_type_values():
     assert result["fields"]["project_type"] is None
     assert result["fields"]["is_public_part"] is None
     assert len(result["validation_errors"]) == 2
+
+
+def test_local_llm_error_classifier_labels_refused_messages():
+    import requests
+
+    error = requests.ConnectionError("Failed to establish a new connection: [Errno 111] Connection refused")
+
+    assert _classify_request_error(error) == "refused"

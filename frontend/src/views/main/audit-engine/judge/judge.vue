@@ -147,10 +147,23 @@ const singleSubAuditViews = computed(() =>
 )
 const rawFieldRows = computed(() => objectRows(singleAnalysisResult.value?.raw_fields || {}))
 const llmFieldRows = computed(() => objectRows(singleAnalysisResult.value?.llm_result?.fields || {}))
-const finalFieldRows = computed(() => objectRows(singleAnalysisResult.value?.sanitized_fields || {}))
+const sanitizedFieldRows = computed(() => objectRows(singleAnalysisResult.value?.sanitized_fields || {}))
+const finalFieldRows = computed(() => runtimeFieldRows(singleAnalysisResult.value?.final_fields || {}))
+const llmModelsResponseText = computed(() => {
+  const value = singleAnalysisResult.value?.llm_result?.models_response
+  return value ? JSON.stringify(value, null, 2) : ''
+})
 
 function objectRows(value) {
   return Object.entries(value || {}).map(([key, fieldValue]) => ({ key, value: fieldValue }))
+}
+
+function runtimeFieldRows(value) {
+  return Object.entries(value || {}).map(([key, runtime]) => ({
+    key,
+    value: runtime && typeof runtime === 'object' && 'value' in runtime ? runtime.value : runtime,
+    status: runtime && typeof runtime === 'object' ? runtime.status : ''
+  }))
 }
 
 function formatValue(value) {
@@ -309,6 +322,7 @@ async function analyzeSingleFile() {
   }
   fileLoading.value = true
   try {
+    message.info('正在调用本地 LLM 进行字段归类，可能需要 1-2 分钟，请勿刷新页面。')
     singleAnalysisResult.value = await analyzeSingleAuditFile(files)
     parseResult.value = null
     fileJudgeResult.value = null
@@ -501,7 +515,27 @@ function getJudgedRowHeader(file, item) {
                         <a-descriptions-item label="LLM 状态">
                           {{ singleAnalysisResult.llm_result?.available ? '已调用本地 LLM' : '本地 LLM 不可用，已降级' }}
                         </a-descriptions-item>
+                        <a-descriptions-item label="LLM 模型">
+                          {{ singleAnalysisResult.llm_result?.model || '未返回' }}
+                        </a-descriptions-item>
+                        <a-descriptions-item
+                          v-if="!singleAnalysisResult.llm_result?.available"
+                          label="LLM 错误类型"
+                        >
+                          {{ singleAnalysisResult.llm_result?.error_type || 'unknown' }}
+                        </a-descriptions-item>
+                        <a-descriptions-item
+                          v-if="singleAnalysisResult.llm_result?.error_message"
+                          label="LLM 错误详情"
+                        >
+                          {{ singleAnalysisResult.llm_result.error_message }}
+                        </a-descriptions-item>
                       </a-descriptions>
+                      <a-collapse v-if="llmModelsResponseText" ghost>
+                        <a-collapse-panel key="models" header="LM Studio /v1/models 诊断返回">
+                          <pre class="debug-json">{{ llmModelsResponseText }}</pre>
+                        </a-collapse-panel>
+                      </a-collapse>
                       <div class="field-columns">
                         <a-card size="small" title="原始抽取 raw_fields">
                           <a-table
@@ -534,14 +568,30 @@ function getJudgedRowHeader(file, item) {
                           </a-table>
                         </a-card>
                       </div>
-                      <a-card size="small" title="sanitized_fields">
+                      <a-card size="small" title="sanitized_fields（清洗后的 LLM 字段）">
+                        <a-table
+                          size="small"
+                          :pagination="false"
+                          :data-source="sanitizedFieldRows"
+                          :columns="[
+                            { title: '字段', dataIndex: 'key' },
+                            { title: '值', dataIndex: 'value' }
+                          ]"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.dataIndex === 'value'">{{ formatValue(record.value) }}</template>
+                          </template>
+                        </a-table>
+                      </a-card>
+                      <a-card size="small" title="final_fields（合并后进入规则引擎的字段）">
                         <a-table
                           size="small"
                           :pagination="false"
                           :data-source="finalFieldRows"
                           :columns="[
                             { title: '字段', dataIndex: 'key' },
-                            { title: '值', dataIndex: 'value' }
+                            { title: '最终值', dataIndex: 'value' },
+                            { title: '状态', dataIndex: 'status' }
                           ]"
                         >
                           <template #bodyCell="{ column, record }">
@@ -897,6 +947,18 @@ function getJudgedRowHeader(file, item) {
 
 .problem-card {
   border-left: 4px solid #ff4d4f;
+}
+
+.debug-json {
+  max-height: 260px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 
 .fact-item {

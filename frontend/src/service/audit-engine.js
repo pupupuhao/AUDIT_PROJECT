@@ -28,6 +28,7 @@ export function analyzeSingleAuditFile(files) {
   return request({
     url: '/audit-engine/files/analyze-single',
     method: 'post',
+    timeout: 180000,
     data: buildFilesFormData(files)
   })
 }

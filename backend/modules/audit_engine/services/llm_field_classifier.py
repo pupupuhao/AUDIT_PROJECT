@@ -22,10 +22,15 @@ def classify_fields_with_local_llm(raw_fields: Dict[str, Any], raw_text: str) ->
             "model": llm_response.get("model"),
             "fields": {},
             "evidence": {},
-            "uncertainties": ["本地 LLM 不可用，已跳过 AI 字段归类。"],
+            "uncertainties": [
+                f"本地 LLM 调用失败（{llm_response.get('error_type') or 'unknown'}），已跳过 AI 字段归类。"
+            ],
             "validation_errors": [],
             "dropped_fields": [],
             "error": llm_response.get("error"),
+            "error_type": llm_response.get("error_type"),
+            "error_message": llm_response.get("error_message") or llm_response.get("error"),
+            "models_response": llm_response.get("models_response") or {},
         }
 
     sanitized = sanitize_llm_output(llm_response.get("raw_content"), definitions)
@@ -34,4 +39,7 @@ def classify_fields_with_local_llm(raw_fields: Dict[str, Any], raw_text: str) ->
         "model": llm_response.get("model"),
         **sanitized,
         "error": None,
+        "error_type": None,
+        "error_message": None,
+        "models_response": llm_response.get("models_response") or {},
     }
