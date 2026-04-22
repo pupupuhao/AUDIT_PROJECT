@@ -8,3 +8,5 @@ backend/log_file.log
 
 xlsx/
 *.xlsx
+
+backend/docs/*
