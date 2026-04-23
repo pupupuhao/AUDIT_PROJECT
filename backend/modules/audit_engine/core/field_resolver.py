@@ -10,6 +10,15 @@ from modules.audit_engine.services.rule_loader import load_rule_json
 TRUTHY = {"1", "true", "y", "yes", "是", "有", "已签", "已", "存在", "已存在", "通过"}
 FALSY = {"0", "false", "n", "no", "否", "无", "未签", "未", "不存在", "未通过"}
 OUT_OF_WARRANTY_KEYWORDS = ("过保", "已过保", "超过保修", "保修期外", "出保")
+IN_WARRANTY_KEYWORDS = ("保修期内", "未过保", "尚未过保", "仍在保修期", "在保")
+PROXY_VOTE_DATE_FIELDS = {
+    "request_enddate",
+    "发送征求意见表结束日期",
+    "request_startdate",
+    "发送征求意见表开始日期",
+    "reg_date",
+    "决议生成日期",
+}
 
 
 def _is_present(value: Any) -> bool:
@@ -207,15 +216,19 @@ def _derive_fields(
     runtimes["is_emergency_repair"] = _runtime("is_emergency_repair", emergency, "inferred", "property_raw_value")
     runtimes["repair_nature"] = _runtime("repair_nature", repair_nature, "inferred", "is_emergency_repair")
 
-    if "warranty_status" not in runtimes or runtimes["warranty_status"].status == "missing":
-        warranty = "in_warranty"
-        source_column = "expirer_remark"
-    else:
-        text = str(runtimes["warranty_status"].value or "").strip()
-        warranty = "out_of_warranty" if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS) else "in_warranty"
+    warranty_runtime = runtimes.get("warranty_status")
+    warranty = "unknown"
+    source_column = "expirer_remark"
+    if warranty_runtime and warranty_runtime.status != "missing":
+        text = str(warranty_runtime.value or "").strip()
         source_column = "warranty_status"
+        if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS):
+            warranty = "out_of_warranty"
+        elif any(keyword in text for keyword in IN_WARRANTY_KEYWORDS):
+            warranty = "in_warranty"
     runtimes["warranty_status"] = _runtime("warranty_status", warranty, "inferred", source_column)
-    warnings.append("warranty_status 仅按 expirer_remark 当前数据集展示口径推导；缺失和空字符串均按 in_warranty 处理，仅作展示说明，不参与本轮合规结论。")
+    if warranty == "unknown":
+        warnings.append("保修状态缺失或无法判断，需补充保修期满依据。")
 
     vote_household_rate = _ratio(_value(runtimes, "vote_approved_households"), _value(runtimes, "vote_total_households"))
     vote_area_rate = _ratio(_value(runtimes, "vote_approved_area"), _value(runtimes, "vote_total_area"))
@@ -233,10 +246,10 @@ def _derive_fields(
     vote_runtime = runtimes.get("vote_date")
     if vote_runtime and vote_runtime.selected_index >= 0 and vote_runtime.selected_index < len(vote_runtime.candidates):
         vote_date_source = vote_runtime.candidates[vote_runtime.selected_index].source_column.lower()
-    vote_date_is_proxy = None if not vote_date else vote_date_source not in {"request_enddate", "发送征求意见表结束日期"}
+    vote_date_is_proxy = None if not vote_date else vote_date_source in PROXY_VOTE_DATE_FIELDS
     runtimes["vote_date_is_proxy"] = _runtime("vote_date_is_proxy", vote_date_is_proxy, "inferred", "vote_date")
     if vote_date_is_proxy:
-        warnings.append("当前以征询开始日期或录入日期代替表决日期，仅用于展示和弱校验。")
+        warnings.append("当前 vote_date 来自征询/录入等代理日期字段，仅用于展示和弱校验。")
 
     is_before_vote = None
     if repair_nature == "normal":
@@ -304,4 +317,3 @@ def runtime_values(standard_fields: Dict[str, Any]) -> Dict[str, Any]:
         else:
             values[field_key] = field_value
     return values
-

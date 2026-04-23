@@ -99,6 +99,62 @@
         "primary": false
       }
     ],
+    "ENTITY_IN_WARRANTY_NOT_ELIGIBLE": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二条、第十八条",
+        "display_text": "住宅专项维修资金管理办法 第二条、第十八条：专项维修资金用于保修期满后的共用部位、共用设施设备维修和更新、改造。",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二条、第十八条",
+        "section": "专项维修资金用于保修期满后的共用部位、共用设施设备维修和更新、改造",
+        "basis_explanation": "项目明确仍在保修期内时，不符合专项维修资金保修期满后使用口径。",
+        "basis_strength": "strong",
+        "primary": true
+      },
+      {
+        "display_name": "《物业管理条例》第五十三条",
+        "display_text": "物业管理条例 第五十三条：专项维修资金用于物业保修期满后共用部位、共用设施设备的维修和更新、改造。",
+        "source_type": "regulation",
+        "title": "物业管理条例",
+        "issuer": "国务院",
+        "document_no": "",
+        "article": "第五十三条",
+        "section": "专项维修资金用于物业保修期满后共用部位、共用设施设备的维修和更新、改造",
+        "basis_explanation": "项目明确在保时，应先核验保修责任，不宜直接列支专项维修资金。",
+        "basis_strength": "strong",
+        "primary": false
+      }
+    ],
+    "ENTITY_WARRANTY_UNKNOWN_NEED_REVIEW": [
+      {
+        "display_name": "《住宅专项维修资金管理办法》（建设部、财政部令第165号）第二条、第十八条",
+        "display_text": "住宅专项维修资金管理办法 第二条、第十八条：专项维修资金使用需核验是否属于保修期满后的维修事项。",
+        "source_type": "regulation",
+        "title": "住宅专项维修资金管理办法",
+        "issuer": "建设部、财政部",
+        "document_no": "建设部、财政部令第165号",
+        "article": "第二条、第十八条",
+        "section": "保修期满后使用口径背景依据",
+        "basis_explanation": "当前保修状态缺失或无法判断，需补充保修期满依据后复核。",
+        "basis_strength": "weak",
+        "primary": true
+      },
+      {
+        "display_name": "《物业管理条例》第五十三条",
+        "display_text": "物业管理条例 第五十三条：专项维修资金使用需结合物业保修期满后条件核验。",
+        "source_type": "regulation",
+        "title": "物业管理条例",
+        "issuer": "国务院",
+        "document_no": "",
+        "article": "第五十三条",
+        "section": "物业保修期满后共用部位、共用设施设备维修",
+        "basis_explanation": "当前缺少保修期满依据，建议补充材料并人工复核。",
+        "basis_strength": "weak",
+        "primary": false
+      }
+    ],
     "ENTITY_IN_WARRANTY": [
       {
         "display_name": "保修状态展示口径（当前四层审计不主动发出）",

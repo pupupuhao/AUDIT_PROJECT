@@ -277,15 +277,16 @@ def _map_warranty_status(sources: Dict[str, Dict[str, Any]]) -> Tuple[Optional[s
         ),
     )
     warnings: List[str] = []
-    if source is None:
-        # Demo口径：当前数据集为了稳定展示，expirer_remark 字段缺失也按 in_warranty 处理。
-        # 这不是正式保修期认定规则，后续接入完整保修字段后应替换为真实业务口径。
-        source = "default"
-        field = "expirer_remark"
-        value = ""
     text = str(value or "").strip()
-    status = "out_of_warranty" if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS) else "in_warranty"
-    warnings.append("warranty_status 仅按 expirer_remark 当前数据集展示口径推导；缺失和空字符串均按 in_warranty 处理，仅作展示说明，不参与本轮合规结论。")
+    if any(keyword in text for keyword in OUT_OF_WARRANTY_KEYWORDS):
+        status = "out_of_warranty"
+    elif any(keyword in text for keyword in ("保修期内", "未过保", "尚未过保", "仍在保修期", "在保")):
+        status = "in_warranty"
+    else:
+        status = "unknown"
+        warnings.append("保修状态缺失或无法判断，需补充保修期满依据。")
+        source = source or "default"
+        field = field or "expirer_remark"
     return status, _record("warranty_status", status, source or "", field), warnings
 
 
@@ -361,7 +362,7 @@ def _map_vote_fields(sources: Dict[str, Dict[str, Any]]) -> Tuple[Dict[str, Any]
     vote_date_source_field = None
     vote_date_is_proxy = None
     for source_field, is_proxy, warning in (
-        ("request_enddate", False, ""),
+        ("request_enddate", True, "当前 vote_date 来自征询结束日期，仅用于展示和弱校验。"),
         ("request_startdate", True, "当前以征询开始日期代替表决日期，仅用于展示和弱校验。"),
         ("reg_date", True, "当前以录入日期代替表决日期，仅用于展示和弱校验。"),
     ):

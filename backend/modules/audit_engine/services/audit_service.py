@@ -17,6 +17,7 @@ DISPLAY_MAPPING = {
 }
 ENTITY_FIELDS = [
     "project_name",
+    "warranty_status",
     "is_public_part",
     "is_private_part",
     "is_property_service_scope",
@@ -50,6 +51,8 @@ ENTITY_CODES = {
     "ENTITY_PUBLIC_REPAIR_OBJECT",
     "ENTITY_PRIVATE_PART_NOT_ELIGIBLE",
     "ENTITY_PROPERTY_SERVICE_SCOPE",
+    "ENTITY_IN_WARRANTY_NOT_ELIGIBLE",
+    "ENTITY_WARRANTY_UNKNOWN_NEED_REVIEW",
     "ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW",
     "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW",
 }
@@ -137,6 +140,26 @@ def _audit_entity(fields: Dict[str, Any], mapping_layer: Dict[str, Any]) -> Dict
     public_part = fields.get("is_public_part")
     private_part = fields.get("is_private_part")
     property_scope = fields.get("is_property_service_scope")
+    warranty_status = fields.get("warranty_status")
+
+    if warranty_status == "in_warranty":
+        return _result(
+            "non_compliant",
+            ["ENTITY_IN_WARRANTY_NOT_ELIGIBLE"],
+            ["项目明确仍在保修期内，专项维修资金原则上用于保修期满后的共用部位、共用设施设备维修和更新改造。"],
+            [],
+            ["field_mapping_layer", "entity_audit", "in_warranty"],
+            ENTITY_FIELDS,
+        )
+    if warranty_status in (None, "unknown"):
+        return _result(
+            "manual_review",
+            ["ENTITY_WARRANTY_UNKNOWN_NEED_REVIEW"],
+            ["缺少保修期满依据或保修状态无法判断，需补充保修期材料后人工复核。"],
+            ["warranty_status"],
+            ["field_mapping_layer", "entity_audit", "warranty_unknown"],
+            ENTITY_FIELDS,
+        )
 
     if public_part is True and (private_part is True or property_scope is True):
         return _result(

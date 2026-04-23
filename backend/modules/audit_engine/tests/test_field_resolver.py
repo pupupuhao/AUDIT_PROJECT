@@ -69,3 +69,59 @@ def test_resolve_all_fields_reports_missing_required_raw_fact():
     assert resolved["standard_fields"]["property_raw_value"]["status"] == "missing"
     assert "property_raw_value" in resolved["missing_fields"]
 
+
+def test_warranty_status_uses_three_state_policy():
+    unknown = resolve_all_fields({})
+    assert unknown["standard_fields"]["warranty_status"]["value"] == "unknown"
+
+    out = resolve_all_fields(
+        {
+            "warranty_status": [
+                make_candidate(
+                    field_type="enum|null",
+                    source_type="excel",
+                    source_file="demo.xlsx",
+                    source_sheet="维修决案",
+                    source_column="EXPIRER_REMARK",
+                    raw_value="已过保",
+                )
+            ]
+        }
+    )
+    assert out["standard_fields"]["warranty_status"]["value"] == "out_of_warranty"
+
+    inside = resolve_all_fields(
+        {
+            "warranty_status": [
+                make_candidate(
+                    field_type="enum|null",
+                    source_type="excel",
+                    source_file="demo.xlsx",
+                    source_sheet="维修决案",
+                    source_column="EXPIRER_REMARK",
+                    raw_value="保修期内",
+                )
+            ]
+        }
+    )
+    assert inside["standard_fields"]["warranty_status"]["value"] == "in_warranty"
+
+
+def test_vote_end_date_is_marked_as_proxy_date():
+    resolved = resolve_all_fields(
+        {
+            "vote_date": [
+                make_candidate(
+                    field_type="date|null",
+                    source_type="excel",
+                    source_file="demo.xlsx",
+                    source_sheet="业主表决汇总",
+                    source_column="REQUEST_ENDDATE",
+                    raw_value="20240301",
+                )
+            ]
+        }
+    )
+
+    assert resolved["standard_fields"]["vote_date"]["value"] == "2024-03-01"
+    assert resolved["standard_fields"]["vote_date_is_proxy"]["value"] is True

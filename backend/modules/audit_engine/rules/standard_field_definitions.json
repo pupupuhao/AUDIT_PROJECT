@@ -120,10 +120,11 @@
       "category": "工程性质",
       "type": "enum|null",
       "field_level": "派生事实",
-      "description": "保修状态展示字段。",
+      "description": "保修状态三态字段：in_warranty、out_of_warranty、unknown；专项维修资金原则上用于保修期满后的共用部位、共用设施设备维修。",
+      "enum": ["in_warranty", "out_of_warranty", "unknown", null],
       "source_priority": ["维修决案", "维修预案"],
       "required_for_audit": false,
-      "comment": "保修状态展示字段。当前仅按 expirer_remark 展示口径推导；缺失和空字符串均按 in_warranty 处理，不参与本轮合规结论。"
+      "comment": "保修状态参与保修前置判断；缺失、空值、无法判断均为 unknown。"
     },
     "has_vote_trace": {
       "field_name": "是否存在表决痕迹",

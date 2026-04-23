@@ -5,6 +5,8 @@
       "ENTITY_PUBLIC_REPAIR_OBJECT": "项目属于共用部位或共用设施设备维修对象。",
       "ENTITY_PRIVATE_PART_NOT_ELIGIBLE": "项目属于业主专有部分，不符合维修资金使用条件。",
       "ENTITY_PROPERTY_SERVICE_SCOPE": "项目属于物业日常服务或维保范围，不符合维修资金使用条件。",
+      "ENTITY_IN_WARRANTY_NOT_ELIGIBLE": "项目明确仍在保修期内，不符合专项维修资金保修期满后使用口径。",
+      "ENTITY_WARRANTY_UNKNOWN_NEED_REVIEW": "保修状态缺失或无法判断，需补充保修期满依据后人工复核。",
       "ENTITY_IN_WARRANTY": "保修状态展示提示；当前四层审计不主动发出。",
       "ENTITY_OBJECT_UNKNOWN_MANUAL_REVIEW": "项目本体对象或范围无法确认，需人工复核。",
       "ENTITY_FIELD_CONFLICT_MANUAL_REVIEW": "项目目录语义与来源字段存在冲突，需人工复核。"

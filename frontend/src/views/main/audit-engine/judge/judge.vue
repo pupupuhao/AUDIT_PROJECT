@@ -141,6 +141,7 @@ const parsedFiles = computed(() => parseResult.value?.files || [])
 const judgedFiles = computed(() => fileJudgeResult.value?.files || [])
 const singleAuditResult = computed(() => singleAnalysisResult.value?.audit_result || null)
 const singleReportSummary = computed(() => singleAnalysisResult.value?.report_summary || null)
+const customerView = computed(() => singleAnalysisResult.value?.customer_view || {})
 const singleProblemCards = computed(() => buildProblemCards(singleAuditResult.value))
 const singleSubAuditViews = computed(() =>
   subAuditMeta.map((meta) => buildSubAuditView(meta.key, meta.title, singleAuditResult.value?.sub_audits?.[meta.key]))
@@ -149,6 +150,9 @@ const rawFieldRows = computed(() => objectRows(singleAnalysisResult.value?.raw_f
 const llmFieldRows = computed(() => objectRows(singleAnalysisResult.value?.llm_result?.fields || {}))
 const sanitizedFieldRows = computed(() => objectRows(singleAnalysisResult.value?.sanitized_fields || {}))
 const finalFieldRows = computed(() => runtimeFieldRows(singleAnalysisResult.value?.final_fields || {}))
+const customerEvidenceRows = computed(() => customerView.value?.key_evidence || [])
+const customerDimensionCards = computed(() => customerView.value?.dimension_cards || [])
+const customerProblemCards = computed(() => customerView.value?.problem_cards || [])
 const llmModelsResponseText = computed(() => {
   const value = singleAnalysisResult.value?.llm_result?.models_response
   return value ? JSON.stringify(value, null, 2) : ''
@@ -171,6 +175,10 @@ function formatValue(value) {
   if (typeof value === 'boolean') return value ? '是' : '否'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function formatJson(value) {
+  return JSON.stringify(value || {}, null, 2)
 }
 
 function getRiskLevel(auditResult) {
@@ -501,7 +509,141 @@ function getJudgedRowHeader(file, item) {
               />
               <template v-else>
                 <div class="single-flow">
-                  <a-card size="small" title="1. AI提取信息：原始抽取与辅助归类">
+                  <div class="demo-layout">
+                    <a-card class="import-panel" size="small" title="项目导入">
+                      <a-space direction="vertical" size="small" style="width: 100%">
+                        <div class="import-file-name">{{ singleAnalysisResult.filename }}</div>
+                        <div class="muted-text">项目主键：{{ singleAnalysisResult.project_key || '无' }}</div>
+                        <div class="muted-text">解析模式：{{ getParseModeLabel(singleAnalysisResult.parse_mode) }}</div>
+                        <a-alert
+                          type="info"
+                          show-icon
+                          message="AI 仅做字段归类；审计结论、问题与法规依据均来自规则引擎。"
+                        />
+                        <a-tag :color="singleAnalysisResult.llm_result?.available ? 'green' : 'orange'">
+                          {{ singleAnalysisResult.llm_result?.available ? 'LLM 已归类' : 'LLM 已降级' }}
+                        </a-tag>
+                        <div class="muted-text">模型：{{ singleAnalysisResult.llm_result?.model || '未返回' }}</div>
+                      </a-space>
+                    </a-card>
+
+                    <div class="result-panel">
+                      <a-card class="hero-summary" :bordered="false">
+                        <div class="hero-title">{{ customerView.project_name || singleAnalysisResult.project_name }}</div>
+                        <div class="overview-grid">
+                          <a-statistic title="总体结论" :value="customerView.overall_result || getTopStatusLabel(singleAuditResult?.overall_result, singleAuditResult?.display_result)" />
+                          <a-statistic title="风险等级" :value="customerView.risk_level || getRiskLevel(singleAuditResult)" />
+                          <a-statistic title="问题数量" :value="customerView.problem_count ?? customerProblemCards.length" />
+                          <a-statistic title="人工复核" :value="customerView.manual_review_required ? '建议' : '暂不需要'" />
+                        </div>
+                        <div class="summary-text">{{ customerView.summary || singleReportSummary?.summary || singleAuditResult?.display_summary }}</div>
+                      </a-card>
+
+                      <div class="dimension-grid">
+                        <a-card
+                          v-for="item in customerDimensionCards"
+                          :key="item.key"
+                          size="small"
+                          class="dimension-card"
+                        >
+                          <div class="dimension-title">{{ item.title }}</div>
+                          <div class="dimension-result">{{ item.result }}</div>
+                          <a-tag :color="item.risk_level === '高' ? 'red' : item.risk_level === '中' ? 'orange' : 'green'">
+                            风险：{{ item.risk_level }}
+                          </a-tag>
+                          <div class="dimension-summary">{{ item.summary }}</div>
+                        </a-card>
+                      </div>
+
+                      <a-card size="small" title="问题明细">
+                        <a-empty v-if="!customerProblemCards.length" description="未识别到需补正的问题" />
+                        <a-card
+                          v-for="(card, index) in customerProblemCards"
+                          v-else
+                          :key="`${card.title}-${index}`"
+                          size="small"
+                          class="problem-card"
+                          :title="card.title"
+                        >
+                          <a-descriptions size="small" :column="1">
+                            <a-descriptions-item label="问题说明">{{ card.description }}</a-descriptions-item>
+                            <a-descriptions-item label="补正建议">{{ card.suggestion }}</a-descriptions-item>
+                            <a-descriptions-item label="相关法规依据">
+                              <a-space direction="vertical" size="small">
+                                <div v-for="basis in card.basis" :key="`${basis.title}-${basis.article}`" class="basis-section">
+                                  <strong>{{ basis.title }}</strong>
+                                  <span>{{ basis.article || '相关条款' }}</span>
+                                  <span>{{ basis.basis_explanation || basis.display_text }}</span>
+                                </div>
+                              </a-space>
+                            </a-descriptions-item>
+                          </a-descriptions>
+                        </a-card>
+                      </a-card>
+
+                      <a-collapse>
+                        <a-collapse-panel key="evidence" header="证据与字段来源">
+                          <a-table
+                            size="small"
+                            :pagination="false"
+                            :data-source="customerEvidenceRows"
+                            :columns="[
+                              { title: '字段', dataIndex: 'label' },
+                              { title: '采用值', dataIndex: 'value' },
+                              { title: '来源', dataIndex: 'source' },
+                              { title: '复核提示', dataIndex: 'review_hint' }
+                            ]"
+                          />
+                        </a-collapse-panel>
+                        <a-collapse-panel key="staff" header="审计人员视图（技术细节）">
+                          <a-space direction="vertical" size="middle" style="width: 100%">
+                            <a-descriptions size="small" bordered :column="1">
+                              <a-descriptions-item label="reason_code">
+                                {{ (singleAuditResult?.reason_codes || []).join('、') || '无' }}
+                              </a-descriptions-item>
+                              <a-descriptions-item label="warnings">
+                                {{ (singleAnalysisResult.warnings || []).join('；') || '无' }}
+                              </a-descriptions-item>
+                              <a-descriptions-item label="LLM 错误">
+                                {{ singleAnalysisResult.llm_result?.error_type || '无' }}
+                                {{ singleAnalysisResult.llm_result?.error_message || '' }}
+                              </a-descriptions-item>
+                            </a-descriptions>
+                            <a-table
+                              v-if="(singleAnalysisResult.field_conflicts || []).length"
+                              size="small"
+                              :pagination="false"
+                              :data-source="singleAnalysisResult.field_conflicts"
+                              :columns="[
+                                { title: '字段', dataIndex: 'field_label' },
+                                { title: 'parser 值', dataIndex: 'parser_value' },
+                                { title: 'LLM 值', dataIndex: 'llm_value' },
+                                { title: '最终采用值', dataIndex: 'final_value' },
+                                { title: '原因', dataIndex: 'reason' },
+                                { title: '证据', dataIndex: 'evidence' }
+                              ]"
+                            />
+                            <a-collapse ghost>
+                              <a-collapse-panel key="raw" header="raw_fields">
+                                <pre class="debug-json">{{ formatJson(singleAnalysisResult.raw_fields) }}</pre>
+                              </a-collapse-panel>
+                              <a-collapse-panel key="llm" header="llm_fields">
+                                <pre class="debug-json">{{ formatJson(singleAnalysisResult.llm_result?.fields) }}</pre>
+                              </a-collapse-panel>
+                              <a-collapse-panel key="final" header="final_fields">
+                                <pre class="debug-json">{{ formatJson(singleAnalysisResult.final_fields) }}</pre>
+                              </a-collapse-panel>
+                              <a-collapse-panel v-if="llmModelsResponseText" key="models" header="LM Studio /v1/models 诊断返回">
+                                <pre class="debug-json">{{ llmModelsResponseText }}</pre>
+                              </a-collapse-panel>
+                            </a-collapse>
+                          </a-space>
+                        </a-collapse-panel>
+                      </a-collapse>
+                    </div>
+                  </div>
+
+                  <a-card v-if="false" size="small" title="1. AI提取信息：原始抽取与辅助归类">
                     <a-space direction="vertical" size="middle" style="width: 100%">
                       <a-alert
                         type="info"
@@ -928,6 +1070,88 @@ function getJudgedRowHeader(file, item) {
   gap: 16px;
 }
 
+.demo-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.import-panel {
+  position: sticky;
+  top: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.import-file-name {
+  font-weight: 700;
+  color: #172033;
+  line-height: 1.5;
+}
+
+.muted-text {
+  color: #667085;
+  font-size: 13px;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.hero-summary {
+  background:
+    linear-gradient(135deg, rgba(22, 119, 255, 0.1), rgba(82, 196, 26, 0.08)),
+    #fff;
+  border: 1px solid #e6f0ff;
+}
+
+.hero-title {
+  margin-bottom: 16px;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.summary-text {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #344054;
+  line-height: 1.7;
+}
+
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dimension-card {
+  border-left: 4px solid #1677ff;
+}
+
+.dimension-title {
+  color: #344054;
+  font-weight: 700;
+}
+
+.dimension-result {
+  margin: 8px 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.dimension-summary {
+  margin-top: 8px;
+  color: #667085;
+  line-height: 1.6;
+}
+
 .field-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1044,10 +1268,16 @@ function getJudgedRowHeader(file, item) {
 }
 
 @media (max-width: 960px) {
+  .demo-layout,
   .field-columns,
+  .dimension-grid,
   .overview-grid,
   .fact-grid {
     grid-template-columns: 1fr;
+  }
+
+  .import-panel {
+    position: static;
   }
 }
 </style>
